@@ -1,0 +1,6 @@
+@import "tailwindcss";
+@config "../../tailwind.config.cjs";
+
+:root {
+  color-scheme: light;
+}
