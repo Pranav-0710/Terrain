@@ -42,10 +42,14 @@ app = FastAPI(
 
 logger = logging.getLogger("terrain.api")
 
+cors_origins_str = os.getenv("CORS_ALLOWED_ORIGINS", "*")
+allowed_origins = [origin.strip() for origin in cors_origins_str.split(",") if origin.strip()]
+allow_credentials = "*" not in allowed_origins
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:3000"],
-    allow_credentials=True,
+    allow_origins=allowed_origins,
+    allow_credentials=allow_credentials,
     allow_methods=["*"],
     allow_headers=["*"],
 )
