@@ -13,6 +13,11 @@ class Coordinates(BaseModel):
     lng: float
 
 
+class SourceDiversitySlice(BaseModel):
+    region: str
+    count: int = Field(default=0, ge=0)
+
+
 class EventMarker(BaseModel):
     id: str
     title: str
@@ -20,6 +25,7 @@ class EventMarker(BaseModel):
     lng: float
     created_at: datetime
     story_count: int = Field(default=0, ge=0)
+    source_diversity: list[SourceDiversitySlice] = Field(default_factory=list)
 
 
 class AlignmentData(BaseModel):
@@ -33,6 +39,8 @@ class Source(BaseModel):
     name: str
     country: str
     funding_type: str
+    political_lean: str
+    press_freedom_score: int
     proximity_score: int = Field(..., ge=0, le=100)
     distance_km: float = Field(..., ge=0)
     lat: float
@@ -72,6 +80,8 @@ class IngestSourceInput(BaseModel):
     name: str
     country: str = "Unknown"
     funding_type: str = "Unknown"
+    political_lean: str = "Unknown"
+    press_freedom_score: int = 50
     coordinates: IngestCoordinates
 
 
@@ -123,3 +133,9 @@ class ExternalSyncResponse(BaseModel):
     rss_only: int = Field(ge=0)
     failed_feeds: list[str]
     results: list[IngestResult]
+
+
+class ContradictionReport(BaseModel):
+    consensus: str
+    contradictions: list[str]
+    bias_vectors: str

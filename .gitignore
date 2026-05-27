@@ -44,3 +44,7 @@ Thumbs.db
 
 # Agent/Orchestration Metadata
 .orchestration/
+
+# Logs and Temporary files
+*.log
+*logs.txt

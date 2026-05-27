@@ -8,6 +8,8 @@ CREATE TABLE IF NOT EXISTS events (
     lat DOUBLE PRECISION NOT NULL,
     lng DOUBLE PRECISION NOT NULL,
     geom GEOMETRY(POINT, 4321),
+    ai_contradiction_report JSONB,
+    report_story_count INT DEFAULT 0,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
 
@@ -19,7 +21,9 @@ CREATE TABLE IF NOT EXISTS sources (
     lat DOUBLE PRECISION NOT NULL,
     lng DOUBLE PRECISION NOT NULL,
     geom GEOMETRY(POINT, 4321),
-    funding_type TEXT
+    funding_type TEXT,
+    political_lean TEXT DEFAULT 'Unknown',
+    press_freedom_score INT DEFAULT 50
 );
 
 -- Stories Table
@@ -30,6 +34,7 @@ CREATE TABLE IF NOT EXISTS stories (
     content TEXT,
     url TEXT UNIQUE,
     proximity_score FLOAT,
+    ai_analysis JSONB,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
 
@@ -57,6 +62,8 @@ CREATE TABLE IF NOT EXISTS rss_sources (
     lat DOUBLE PRECISION NOT NULL,
     lng DOUBLE PRECISION NOT NULL,
     funding_type TEXT NOT NULL DEFAULT 'Unknown',
+    political_lean TEXT NOT NULL DEFAULT 'Unknown',
+    press_freedom_score INT NOT NULL DEFAULT 50,
     is_active BOOLEAN NOT NULL DEFAULT TRUE,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );

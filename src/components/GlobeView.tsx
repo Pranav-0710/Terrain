@@ -26,25 +26,47 @@ interface GlobeViewProps {
   events: EventMarker[];
   selectedEventId: string | null;
   onSelectEvent: (event: EventMarker) => void;
+  perspectives?: any[]; // Perspectives for the selected event
 }
 
 export function GlobeView({
   events,
   selectedEventId,
   onSelectEvent,
+  perspectives = [],
 }: GlobeViewProps) {
   const globeRef = useRef<any>(null);
 
-  const points = useMemo(
+  const ringsData = useMemo(
     () =>
       events.map((event, index) => ({
         ...event,
-        size: event.id === selectedEventId ? 0.26 : 0.18,
-        altitude: event.id === selectedEventId ? 0.2 : 0.12,
-        color: pointPalette[index % pointPalette.length],
+        maxRadius: (event as any).story_count ? Math.min(Math.max((event as any).story_count * 0.8, 1.5), 8) : 2,
+        propagationSpeed: 1.5,
+        repeatPeriod: 2000,
+        color: event.id === selectedEventId ? '#ffffff' : pointPalette[index % pointPalette.length],
       })),
     [events, selectedEventId],
   );
+
+  const arcsData = useMemo(() => {
+    if (!selectedEventId || !perspectives.length) return [];
+    
+    const selectedEvent = events.find(e => e.id === selectedEventId);
+    if (!selectedEvent) return [];
+
+    return perspectives.map((p, i) => ({
+      startLat: selectedEvent.lat,
+      startLng: selectedEvent.lng,
+      endLat: p.source.lat,
+      endLng: p.source.lng,
+      color: [
+        'rgba(34, 211, 238, 0.8)', 
+        'rgba(168, 85, 247, 0.8)'
+      ],
+      label: p.source.name
+    }));
+  }, [selectedEventId, perspectives, events]);
 
   useEffect(() => {
     const globe = globeRef.current;
@@ -100,13 +122,17 @@ export function GlobeView({
         showAtmosphere
         atmosphereColor="#3b82f6"
         atmosphereAltitude={0.22}
-        pointsData={points}
-        pointLat="lat"
-        pointLng="lng"
-        pointAltitude="altitude"
-        pointRadius="size"
-        pointColor="color"
-        pointResolution={24}
+        
+        // Pulse Rings
+        ringsData={ringsData}
+        ringLat="lat"
+        ringLng="lng"
+        ringColor="color"
+        ringMaxRadius="maxRadius"
+        ringPropagationSpeed="propagationSpeed"
+        ringRepeatPeriod="repeatPeriod"
+        onRingClick={(ring) => handlePointClick(ring as EventMarker)}
+
         pointLabel={(point) => {
           const event = point as EventMarker & { story_count: number };
           return `
@@ -117,7 +143,16 @@ export function GlobeView({
             </div>
           `;
         }}
-        onPointClick={(point) => handlePointClick(point as EventMarker)}
+        
+        // Arcs for Perspectives
+        arcsData={arcsData}
+        arcColor="color"
+        arcDashLength={0.4}
+        arcDashGap={4}
+        arcDashAnimateTime={2000}
+        arcStroke={0.4}
+        arcAltitudeAutoScale={0.5}
+        arcLabel={d => (d as any).label}
       />
     </div>
   );

@@ -10,6 +10,12 @@ export interface EventMarker {
   lng: number;
   created_at: string;
   story_count: number;
+  source_diversity: SourceDiversitySlice[];
+}
+
+export interface SourceDiversitySlice {
+  region: string;
+  count: number;
 }
 
 export interface EventPerspectiveResponse {
@@ -39,6 +45,8 @@ export interface Source {
   name: string;
   country: string;
   funding_type: string;
+  political_lean: string;
+  press_freedom_score: number;
   proximity_score: number;
   distance_km: number;
   lat: number;

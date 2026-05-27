@@ -6,15 +6,37 @@ import json
 import math
 import os
 import re
+import threading
+import time
 from typing import Any
 
 from dotenv import load_dotenv
-from groq import Groq
+from openai import OpenAI
 
 load_dotenv()
 
-GROQ_API_KEY = os.getenv("GROQ_API_KEY")
-client = Groq(api_key=GROQ_API_KEY) if GROQ_API_KEY else None
+endpoints = []
+
+groq_key = os.getenv("GROQ_API_KEY")
+if groq_key:
+    endpoints.append({
+        "client": OpenAI(api_key=groq_key, base_url="https://api.groq.com/openai/v1", timeout=10.0),
+        "model": "llama-3.1-8b-instant"
+    })
+
+gemini_key = os.getenv("GEMINI_API_KEY")
+if gemini_key:
+    endpoints.append({
+        "client": OpenAI(api_key=gemini_key, base_url="https://generativelanguage.googleapis.com/v1beta/openai/", timeout=10.0),
+        "model": "gemini-2.5-flash"
+    })
+
+nvidia_key = os.getenv("NVIDIA_API_KEY")
+if nvidia_key:
+    endpoints.append({
+        "client": OpenAI(api_key=nvidia_key, base_url="https://integrate.api.nvidia.com/v1", timeout=10.0),
+        "model": "meta/llama-3.3-70b-instruct"
+    })
 
 ANALYST_SYSTEM_PROMPT = """You are Terrain Analyst Agent. Extract structured perspective data from real news article text.
 
@@ -41,10 +63,101 @@ Rules:
 4. Keep `editorial_frame` short, not sentence.
 5. `omitted_context` must name meaningful missing context, not repeat article.
 6. Use one funding type from allowed enum only.
-7. If source geography missing, keep `proximity_score` at 0. Caller may overwrite it.
-8. No markdown. No commentary."""
+8. No markdown. No commentary.
+9. ALL output MUST be in English, regardless of the input language."""
 
 FUNDING_TYPES = {"Independent", "Corporate", "State-backed", "NGO-funded", "Mixed"}
+
+
+CONTRADICTION_SYSTEM_PROMPT = """You are Terrain Contradiction Engine. Analyze multiple news stories about the same event.
+Return ONLY valid JSON with this exact schema:
+{
+  "consensus": "<short paragraph summarizing agreed-upon facts>",
+  "contradictions": ["<string: disagreement 1>", "<string: disagreement 2>"],
+  "bias_vectors": "<sentence explaining influence of funding/location>"
+}
+
+Rules:
+1. Identify common ground (Consensus).
+2. Spot factual clashes, numerical discrepancies, or opposing framing (Contradictions).
+3. Analyze how source metadata (country, funding) shapes the narrative (Bias Vectors).
+4. No markdown. No commentary.
+5. ALL output MUST be in English, regardless of the input language."""
+
+# Global lock to serialize LLM calls and prevent 429 Too Many Requests concurrency errors
+_llm_lock = threading.Lock()
+
+
+def _call_llm_with_retries(messages: list[dict], max_tokens: int, temperature: float = 0.2) -> str:
+    """Helper to call LLM with automatic fallback to secondary APIs."""
+    last_err = None
+    with _llm_lock:
+        for ep in endpoints:
+            try:
+                chat_completion = ep["client"].chat.completions.create(
+                    model=ep["model"],
+                    messages=messages,
+                    response_format={"type": "json_object"},
+                    temperature=temperature,
+                    max_tokens=max_tokens,
+                    user="terrain_system",
+                )
+                time.sleep(0.5)
+                message = chat_completion.choices[0].message
+                if getattr(message, 'refusal', None):
+                    raise Exception(f"Model refused request: {message.refusal}")
+                return message.content
+            except Exception as e:
+                err_str = str(e)
+                last_err = e
+                if "429" in err_str or "Too Many Requests" in err_str or "404" in err_str or "RESOURCE_EXHAUSTED" in err_str:
+                    continue
+                continue
+                
+    raise Exception(f"All LLM APIs failed. Last error: {last_err}")
+
+
+def generate_contradiction_report(stories: list[dict]) -> dict[str, Any]:
+    if not stories:
+        return {
+            "consensus": "No stories available to analyze.",
+            "contradictions": [],
+            "bias_vectors": "N/A",
+        }
+
+    if not endpoints:
+        return {
+            "consensus": "API client not configured.",
+            "contradictions": [],
+            "bias_vectors": "N/A",
+        }
+
+    # Prepare lightweight payload for LLM
+    payload = []
+    for s in stories:
+        payload.append({
+            "source": s.get("source_name"),
+            "location": s.get("source_country"),
+            "funding": s.get("funding_type"),
+            "content": clean_article_text(s.get("content", ""))[:2000] # Trim per story to save context
+        })
+
+    try:
+        raw_json = _call_llm_with_retries(
+            messages=[
+                {"role": "system", "content": CONTRADICTION_SYSTEM_PROMPT},
+                {"role": "user", "content": json.dumps(payload)},
+            ],
+            temperature=0.1,
+            max_tokens=1000,
+        )
+        return json.loads(raw_json)
+    except Exception as exc:
+        return {
+            "consensus": f"Error generating report: {str(exc)}",
+            "contradictions": [],
+            "bias_vectors": "N/A",
+        }
 
 
 def clean_article_text(article_text: str) -> str:
@@ -137,23 +250,19 @@ def _fallback_omitted_context(text: str) -> str:
 
 
 def fallback_article_analysis(
-    article_text: str,
-    source_name: str,
-    source_country: str,
-    funding_type: str,
+    text: str, source_name: str, source_country: str, funding_type: str
 ) -> dict[str, Any]:
-    text = clean_article_text(article_text)
     return {
         "source": {
-            "name": source_name or "Unknown source",
+            "name": source_name or "Unknown Source",
             "country": source_country or "Unknown",
-            "funding_type": funding_type if funding_type in FUNDING_TYPES else "Mixed",
+            "funding_type": funding_type or "Mixed",
             "proximity_score": 0,
         },
         "article": {
             "headline": _fallback_headline(text),
             "summary_ai": _fallback_summary(text),
-            "editorial_frame": "Context-driven coverage",
+            "editorial_frame": "Analysis Pending",
             "omitted_context": _fallback_omitted_context(text),
         },
     }
@@ -161,62 +270,68 @@ def fallback_article_analysis(
 
 def analyze_article(
     article_text: str,
-    *,
-    source_name: str,
-    source_country: str,
-    funding_type: str,
+    source_name: str = "",
+    source_country: str = "",
+    funding_type: str = "",
 ) -> dict[str, Any]:
     text = clean_article_text(article_text)
-
     if not text:
-        return fallback_article_analysis("", source_name, source_country, funding_type)
+        return fallback_article_analysis(
+            "", source_name, source_country, funding_type
+        )
 
-    if client is None:
-        return fallback_article_analysis(text, source_name, source_country, funding_type)
+    if not endpoints:
+        return fallback_article_analysis(
+            text, source_name, source_country, funding_type
+        )
 
     user_payload = {
-        "source_name": source_name,
-        "source_country": source_country,
-        "funding_type": funding_type,
+        "source_hints": {
+            "name": source_name,
+            "country": source_country,
+            "funding": funding_type,
+        },
         "article_text": text,
     }
 
     try:
-        chat_completion = client.chat.completions.create(
-            model="llama-3.3-70b-versatile",
+        raw_json = _call_llm_with_retries(
             messages=[
                 {"role": "system", "content": ANALYST_SYSTEM_PROMPT},
                 {"role": "user", "content": json.dumps(user_payload)},
             ],
-            response_format={"type": "json_object"},
             temperature=0.2,
             max_tokens=900,
         )
 
-        raw_json = chat_completion.choices[0].message.content
         parsed = json.loads(raw_json)
         parsed_source = parsed.get("source", {})
         parsed_article = parsed.get("article", {})
 
+        final_funding = parsed_source.get("funding_type", "Mixed")
+        if final_funding not in FUNDING_TYPES:
+            final_funding = "Mixed"
+
         return {
             "source": {
-                "name": parsed_source.get("name") or source_name or "Unknown source",
-                "country": parsed_source.get("country") or source_country or "Unknown",
-                "funding_type": (
-                    parsed_source.get("funding_type")
-                    if parsed_source.get("funding_type") in FUNDING_TYPES
-                    else funding_type if funding_type in FUNDING_TYPES else "Mixed"
-                ),
-                "proximity_score": parsed_source.get("proximity_score", 0) or 0,
+                "name": parsed_source.get("name") or source_name or "Unknown Source",
+                "country": parsed_source.get("country")
+                or source_country
+                or "Unknown",
+                "funding_type": final_funding,
+                "proximity_score": 0,
             },
             "article": {
                 "headline": parsed_article.get("headline") or _fallback_headline(text),
-                "summary_ai": parsed_article.get("summary_ai") or _fallback_summary(text),
+                "summary_ai": parsed_article.get("summary_ai")
+                or _fallback_summary(text),
                 "editorial_frame": parsed_article.get("editorial_frame")
-                or "Context-driven coverage",
+                or "Analysis Pending",
                 "omitted_context": parsed_article.get("omitted_context")
                 or _fallback_omitted_context(text),
             },
         }
     except Exception:
-        return fallback_article_analysis(text, source_name, source_country, funding_type)
+        return fallback_article_analysis(
+            text, source_name, source_country, funding_type
+        )

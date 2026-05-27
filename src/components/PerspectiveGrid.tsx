@@ -1,40 +1,52 @@
 import type { Perspective } from "../app/types";
 import { SourceDNACard } from "./SourceDNACard";
 
-const alignmentTone = {
-  local: "bg-emerald-400/15 text-emerald-200 ring-emerald-300/25",
-  regional: "bg-amber-400/15 text-amber-100 ring-amber-300/25",
-  global: "bg-fuchsia-400/15 text-fuchsia-100 ring-fuchsia-300/25",
-} as const;
-
 export function PerspectiveGrid({
   perspectives,
+  selectedIds = [],
+  onToggle,
 }: {
   perspectives: Perspective[];
+  selectedIds?: string[];
+  onToggle?: (id: string) => void;
 }) {
   return (
-    <div className="grid gap-5">
-      {perspectives.map((perspective, index) => (
-        <div
-          key={perspective.story_id}
-          className="rounded-[1.75rem] border border-white/10 bg-white/[0.06] p-5 shadow-[0_30px_120px_rgba(2,6,23,0.35)] backdrop-blur-xl transition duration-300 hover:border-cyan-300/20 hover:bg-white/[0.075]"
-        >
-          <div className="flex flex-col gap-5">
-            <article className="flex flex-col gap-4">
-              <div className="flex flex-wrap items-start justify-between gap-3">
-                <div className="flex flex-wrap items-center gap-3">
-                  <span className="rounded-full border border-white/10 bg-white/[0.06] px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.25em] text-slate-300">
-                    Perspective {index + 1}
-                  </span>
-                  <span
-                    className={`rounded-full px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.25em] ring-1 ${
-                      alignmentTone[perspective.alignment.relative_position]
-                    }`}
-                  >
-                    {perspective.alignment.relative_position}
-                  </span>
-                  <span className="rounded-full border border-white/10 bg-slate-950/70 px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.22em] text-slate-300">
-                    {perspective.source.funding_type}
+    <div className="space-y-6">
+      {perspectives.map((perspective, index) => {
+        const isSelected = selectedIds.includes(perspective.story_id);
+        
+        return (
+          <div
+            key={perspective.story_id}
+            onClick={() => onToggle?.(perspective.story_id)}
+            style={{ animationDelay: `${(index + 5) * 50}ms` }}
+            className={`group relative cursor-pointer rounded-xl border p-6 transition-all duration-300 animate-fade-in-up opacity-0 ${
+              isSelected 
+                ? "border-cyan-500/50 bg-cyan-500/[0.03] shadow-[0_0_20px_rgba(6,182,212,0.1)]" 
+                : "border-white/[0.04] bg-[#000000] hover:border-white/10 hover:bg-white/[0.01]"
+            }`}
+          >
+            {/* Selection Indicator */}
+            <div className={`absolute -left-1 top-1/2 -translate-y-1/2 h-8 w-1 rounded-r-full transition-all duration-300 ${
+              isSelected ? "bg-cyan-500 opacity-100" : "bg-white/10 opacity-0 group-hover:opacity-100"
+            }`} />
+
+            <div className="flex flex-col">
+              <div className="flex flex-wrap items-start justify-between gap-4 mb-4">
+                <div className="flex items-center gap-3">
+                  <div className={`flex h-4 w-4 items-center justify-center rounded border transition-colors ${
+                    isSelected ? "border-cyan-500 bg-cyan-500" : "border-white/20"
+                  }`}>
+                    {isSelected && (
+                      <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="black" strokeWidth="4">
+                        <polyline points="20 6 9 17 4 12" />
+                      </svg>
+                    )}
+                  </div>
+                  <span className={`text-[10px] font-semibold uppercase tracking-widest transition-colors ${
+                    isSelected ? "text-cyan-400" : "text-slate-500"
+                  }`}>
+                    {perspective.alignment.relative_position} Perspective
                   </span>
                 </div>
 
@@ -43,101 +55,66 @@ export function PerspectiveGrid({
                     href={perspective.url}
                     target="_blank"
                     rel="noreferrer"
-                    className="inline-flex w-fit items-center gap-2 rounded-full border border-white/10 bg-white/[0.06] px-4 py-2 text-[10px] font-semibold uppercase tracking-[0.24em] text-slate-200 transition hover:border-cyan-300/30 hover:text-cyan-100"
+                    className="text-[10px] font-semibold uppercase tracking-widest text-slate-400 hover:text-white transition-colors"
                   >
-                    Read Source
+                    Read Source ↗
                   </a>
                 ) : null}
               </div>
 
-              <div>
-                <h3 className="text-xl font-semibold tracking-tight text-white sm:text-2xl">
-                  {perspective.article.headline}
-                </h3>
-                <p className="mt-2 text-sm leading-6 text-slate-400">
-                  {perspective.source.name}
-                  {" · "}
-                  {perspective.source.country}
-                </p>
+              <h3 className="text-lg font-medium text-white leading-snug mb-4">
+                {perspective.article.headline}
+              </h3>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-6">
+                <div>
+                  <p className="text-[10px] font-semibold uppercase tracking-widest text-slate-500 mb-1">
+                    Editorial Frame
+                  </p>
+                  <p className="text-xs text-slate-300">
+                    {perspective.article.editorial_frame}
+                  </p>
+                </div>
+                <div>
+                  <p className="text-[10px] font-semibold uppercase tracking-widest text-slate-500 mb-1">
+                    Published
+                  </p>
+                  <p className="text-xs text-slate-300">
+                    {new Date(perspective.created_at).toLocaleString(undefined, {
+                      month: "short",
+                      day: "numeric",
+                      hour: "numeric",
+                      minute: "2-digit",
+                    })}
+                  </p>
+                </div>
               </div>
 
-              <div className="grid gap-3 sm:grid-cols-3">
-                <InlineStat
-                  label="Distance"
-                  value={`${Math.round(
-                    perspective.alignment.distance_km,
-                  ).toLocaleString()} km`}
-                />
-                <InlineStat
-                  label="Proximity"
-                  value={`${perspective.alignment.proximity_score}`}
-                />
-                <InlineStat
-                  label="Frame"
-                  value={perspective.article.editorial_frame}
-                />
-              </div>
-
-              <p className="text-xs uppercase tracking-[0.2em] text-slate-500">
-                Published{" "}
-                {new Date(perspective.created_at).toLocaleString(undefined, {
-                  month: "short",
-                  day: "numeric",
-                  hour: "numeric",
-                  minute: "2-digit",
-                })}
-              </p>
-
-              <div className="rounded-[1.25rem] border border-cyan-300/10 bg-slate-950/45 p-4">
-                <p className="text-[10px] font-semibold uppercase tracking-[0.28em] text-cyan-200/80">
+              <div className="mb-6">
+                <p className="text-[10px] font-semibold uppercase tracking-widest text-slate-500 mb-2">
                   AI Summary
                 </p>
-                <p className="mt-2 text-sm leading-6 text-slate-200">
+                <p className="text-sm leading-relaxed text-slate-300">
                   {perspective.article.summary_ai}
                 </p>
               </div>
 
-              <div className="grid gap-3 sm:grid-cols-2">
-                <div className="rounded-[1.25rem] border border-white/[0.08] bg-slate-950/30 p-4">
-                  <p className="text-[10px] font-semibold uppercase tracking-[0.26em] text-slate-500">
+              {perspective.article.omitted_context && (
+                <div className="mb-6 border-l border-white/[0.08] pl-4">
+                  <p className="text-[10px] font-semibold uppercase tracking-widest text-slate-500 mb-2">
                     Missing Context
                   </p>
-                  <p className="mt-2 text-sm leading-6 text-slate-300">
+                  <p className="text-sm leading-relaxed text-slate-400 italic">
                     {perspective.article.omitted_context}
                   </p>
                 </div>
-                <div className="rounded-[1.25rem] border border-white/[0.08] bg-slate-950/30 p-4">
-                  <p className="text-[10px] font-semibold uppercase tracking-[0.26em] text-slate-500">
-                    Original Article
-                  </p>
-                  <p className="mt-2 line-clamp-5 text-sm leading-6 text-slate-300">
-                    {perspective.article.content}
-                  </p>
-                </div>
-              </div>
-            </article>
+              )}
 
-            <SourceDNACard source={perspective.source} />
+              <SourceDNACard source={perspective.source} />
+            </div>
           </div>
-        </div>
-      ))}
-    </div>
-  );
-}
-
-function InlineStat({
-  label,
-  value,
-}: {
-  label: string;
-  value: string;
-}) {
-  return (
-    <div className="rounded-[1.1rem] border border-white/[0.08] bg-slate-950/30 p-3">
-      <p className="text-[10px] font-semibold uppercase tracking-[0.24em] text-slate-500">
-        {label}
-      </p>
-      <p className="mt-2 text-sm font-medium leading-5 text-white">{value}</p>
+        );
+      })}
     </div>
   );
 }

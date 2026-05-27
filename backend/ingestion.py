@@ -17,7 +17,7 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 from typing import Callable
 from urllib.parse import urlparse
-from xml.etree import ElementTree as ET
+from defusedxml import ElementTree as ET
 
 import requests
 
@@ -134,6 +134,8 @@ class RssFeedConfig:
     lat: float
     lng: float
     funding_type: str
+    political_lean: str = "Unknown"
+    press_freedom_score: int = 50
 
 
 @dataclass
@@ -189,7 +191,7 @@ def load_rss_feeds(get_db_connection=None) -> list[RssFeedConfig]:
             with get_db_connection() as conn:
                 with conn.cursor() as cur:
                     cur.execute(
-                        "SELECT name, url, country, lat, lng, funding_type FROM rss_sources WHERE is_active = TRUE ORDER BY name"
+                        "SELECT name, url, country, lat, lng, funding_type, political_lean, press_freedom_score FROM rss_sources WHERE is_active = TRUE ORDER BY name"
                     )
                     rows = cur.fetchall()
                     if rows:
@@ -339,6 +341,14 @@ def parse_rss_feed(xml_text: str, source: RssFeedConfig) -> list[RssArticle]:
     return items
 
 
+def is_english_title(title: str) -> bool:
+    """Reject titles that are predominantly non-ASCII (e.g. Japanese, Chinese, Arabic)."""
+    if not title:
+        return False
+    ascii_chars = sum(1 for c in title if ord(c) < 128)
+    return ascii_chars / len(title) >= 0.7
+
+
 def fetch_rss_articles(feeds: list[RssFeedConfig]) -> tuple[list[RssArticle], list[str]]:
     articles: list[RssArticle] = []
     failed_feeds: list[str] = []
@@ -350,6 +360,9 @@ def fetch_rss_articles(feeds: list[RssFeedConfig]) -> tuple[list[RssArticle], li
             articles.extend(parse_rss_feed(response.text, feed))
         except Exception:
             failed_feeds.append(feed.name)
+
+    # Filter out non-English articles
+    articles = [a for a in articles if is_english_title(a.title)]
 
     deduped: dict[str, RssArticle] = {}
     for article in articles:
@@ -370,6 +383,8 @@ def build_ingest_payload(article: RssArticle, gdelt_match: GdeltLocationMatch | 
     source_name = source.name or source_hint.name
     source_country = source.country or source_hint.country
     source_funding = source.funding_type or source_hint.funding_type
+    source_lean = source.political_lean or source_hint.political_lean
+    source_pfs = source.press_freedom_score if source.press_freedom_score else source_hint.press_freedom_score
     source_lat = source.lat if source.lat != 0.0 else source_hint.lat
     source_lng = source.lng if source.lng != 0.0 else source_hint.lng
 
@@ -382,6 +397,8 @@ def build_ingest_payload(article: RssArticle, gdelt_match: GdeltLocationMatch | 
             "name": source_name,
             "country": source_country,
             "funding_type": source_funding,
+            "political_lean": source_lean,
+            "press_freedom_score": source_pfs,
             "coordinates": {"lat": source_lat, "lng": source_lng},
         },
         url=article.url,

@@ -4,22 +4,26 @@ import { useEffect, useMemo, useState } from "react";
 
 import { GlobeView } from "../components/GlobeView";
 import { PerspectiveGrid } from "../components/PerspectiveGrid";
-import type { EventMarker, EventPerspectiveResponse, Perspective } from "./types";
+import { ContradictionPanel } from "../components/ContradictionPanel";
+import { SourceDiversityRing } from "../components/SourceDiversityRing";
+import { ComparisonMode } from "../components/ComparisonMode";
+import { EventTimeline } from "../components/EventTimeline";
+import type { EventMarker, EventPerspectiveResponse } from "./types";
 
 const API_BASE_URL =
   process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8000";
 
 const panelBaseClass =
-  "absolute inset-y-3 right-3 z-20 w-[min(38rem,calc(100vw-1.5rem))] overflow-hidden rounded-[2rem] border border-white/10 bg-slate-950/82 shadow-[0_40px_160px_rgba(2,6,23,0.6)] backdrop-blur-2xl transition-all duration-500 ease-out md:inset-y-4 md:right-4 md:w-[min(38rem,calc(100vw-2rem))]";
+  "absolute inset-y-4 right-4 z-20 w-[min(30rem,calc(100vw-2rem))] overflow-hidden rounded-2xl border border-white/[0.08] bg-[#000000]/80 shadow-2xl backdrop-blur-2xl transition-all duration-500 ease-out md:inset-y-6 md:right-6";
 
 export default function HomePage() {
   const [events, setEvents] = useState<EventMarker[]>([]);
   const [selectedEvent, setSelectedEvent] = useState<EventMarker | null>(null);
+  const [showPanelMobile, setShowPanelMobile] = useState(true);
   const [eventDetails, setEventDetails] =
     useState<EventPerspectiveResponse | null>(null);
-  const [perspectiveSort, setPerspectiveSort] = useState<"recency" | "proximity">(
-    "recency",
-  );
+  const [perspectiveSort, setPerspectiveSort] = useState<"recency" | "proximity">("recency");
+  const [selectedPerspectives, setSelectedPerspectives] = useState<string[]>([]);
   const [isLoadingEvents, setIsLoadingEvents] = useState(true);
   const [isLoadingDetails, setIsLoadingDetails] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -59,7 +63,6 @@ export default function HomePage() {
     };
 
     loadEvents();
-
     return () => abortController.abort();
   }, []);
 
@@ -69,6 +72,9 @@ export default function HomePage() {
       return;
     }
 
+    setShowPanelMobile(true);
+    setEventDetails(null); // Clear old event data immediately
+    
     const abortController = new AbortController();
 
     const loadEventDetails = async () => {
@@ -102,7 +108,6 @@ export default function HomePage() {
     };
 
     loadEventDetails();
-
     return () => abortController.abort();
   }, [selectedEvent]);
 
@@ -123,143 +128,148 @@ export default function HomePage() {
   }, [eventDetails]);
 
   const sortedPerspectives = useMemo(() => {
-    if (!eventDetails) {
-      return [];
-    }
-
+    if (!eventDetails) return [];
     return [...eventDetails.perspectives].sort((left, right) => {
       if (perspectiveSort === "proximity") {
         return right.alignment.proximity_score - left.alignment.proximity_score;
       }
-
-      return (
-        new Date(right.created_at).getTime() - new Date(left.created_at).getTime()
-      );
+      return new Date(right.created_at).getTime() - new Date(left.created_at).getTime();
     });
   }, [eventDetails, perspectiveSort]);
 
+  const togglePerspective = (id: string) => {
+    setSelectedPerspectives(prev => {
+      if (prev.includes(id)) return prev.filter(p => p !== id);
+      if (prev.length >= 2) return [prev[1], id];
+      return [...prev, id];
+    });
+  };
+
+  const comparisonData = useMemo(() => {
+    if (selectedPerspectives.length !== 2 || !eventDetails) return null;
+    const pA = eventDetails.perspectives.find(p => p.story_id === selectedPerspectives[0]);
+    const pB = eventDetails.perspectives.find(p => p.story_id === selectedPerspectives[1]);
+    if (!pA || !pB) return null;
+    return { pA, pB };
+  }, [selectedPerspectives, eventDetails]);
+
   return (
-    <main className="relative min-h-screen overflow-hidden bg-[#020617] text-white">
+    <main className="relative min-h-screen w-full overflow-hidden bg-[#000000] text-slate-100">
+      
+      {comparisonData && (
+        <ComparisonMode 
+          perspectiveA={comparisonData.pA} 
+          perspectiveB={comparisonData.pB} 
+          onClose={() => setSelectedPerspectives([])} 
+        />
+      )}
+
+      {/* 3D Globe - Now the absolute focal point */}
       <GlobeView
         events={events}
         selectedEventId={selectedEvent?.id ?? null}
         onSelectEvent={setSelectedEvent}
+        perspectives={eventDetails?.perspectives ?? []}
       />
 
-      <div className="pointer-events-none absolute inset-0 bg-[linear-gradient(115deg,rgba(2,6,23,0.92)_0%,rgba(2,6,23,0.5)_38%,rgba(2,6,23,0.2)_65%,rgba(2,6,23,0.85)_100%)]" />
+      {/* Subtle Vignette */}
+      <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_at_center,transparent_30%,#000000_100%)]" />
 
-      <section className="pointer-events-none absolute left-0 top-0 z-10 flex h-full w-full flex-col justify-between p-4 md:p-8">
-        <div className="max-w-xl rounded-[2rem] border border-white/10 bg-slate-950/40 p-6 shadow-[0_30px_120px_rgba(2,6,23,0.4)] backdrop-blur-xl">
-          <div className="flex items-center gap-3">
-            <span className="h-2.5 w-2.5 rounded-full bg-cyan-300 shadow-[0_0_18px_rgba(34,211,238,0.8)]" />
-            <p className="text-[11px] font-semibold uppercase tracking-[0.35em] text-cyan-100/80">
-              Terrain V2
-            </p>
-          </div>
-
-          <h1 className="mt-5 text-4xl font-semibold tracking-tight text-white md:text-6xl">
-            Global narratives, mapped against physical distance.
+      {/* Left Control Surface */}
+      <section className="pointer-events-none absolute left-0 top-0 z-10 flex h-full w-full flex-col justify-between p-6 md:p-8">
+        
+        {/* Sleek Minimalist Header */}
+        <div className="animate-slide-up pointer-events-auto flex w-fit items-center gap-4 rounded-xl border border-white/[0.08] bg-[#000000]/60 px-5 py-3 backdrop-blur-xl">
+          <span className="h-1.5 w-1.5 rounded-full bg-white opacity-80" />
+          <h1 className="text-xs font-semibold tracking-widest text-white uppercase">
+            Terrain V3
           </h1>
-          <p className="mt-4 max-w-lg text-sm leading-7 text-slate-300 md:text-base">
-            Click any event marker. Terrain pulls real database coverage, aligns
-            source geography to event epicenter, and reveals framing drift.
+          <div className="hidden sm:block h-3 w-px bg-white/20" />
+          <p className="hidden sm:block text-xs text-slate-400">
+            {events.length} tracked events · {headlineStats.sourceCount} active perspectives
           </p>
-
-          <div className="mt-6 grid gap-3 sm:grid-cols-3">
-            <MetricCard label="Tracked events" value={events.length} />
-            <MetricCard
-              label="Mapped sources"
-              value={headlineStats.sourceCount}
-            />
-            <MetricCard
-              label="Avg proximity"
-              value={`${headlineStats.avgProximity}`}
-            />
-          </div>
         </div>
 
-        <div className="grid max-w-3xl gap-4 lg:grid-cols-[minmax(0,1fr)_18rem]">
-          <div className="max-w-sm rounded-[1.6rem] border border-white/10 bg-slate-950/[0.35] p-4 text-sm text-slate-300 backdrop-blur-xl">
-            <p className="text-[10px] font-semibold uppercase tracking-[0.28em] text-slate-400">
-              Control Surface
-            </p>
-            <p className="mt-2 leading-6">
-              Select marker to rotate globe, lock camera, open perspective panel.
-              Click another marker to compare narrative DNA across regions.
+        {/* Minimalist Event Rail */}
+        <div className={`animate-slide-up-delay pointer-events-auto w-full max-w-[22rem] md:w-[22rem] ${selectedEvent && showPanelMobile ? "hidden md:block" : "block"}`}>
+          <div className="mb-3 flex items-center justify-between px-1">
+            <p className="text-[10px] font-semibold uppercase tracking-widest text-slate-400">
+              Event Rail
             </p>
           </div>
 
-          <div className="pointer-events-auto rounded-[1.6rem] border border-white/10 bg-slate-950/45 p-3 shadow-[0_24px_90px_rgba(2,6,23,0.3)] backdrop-blur-xl">
-            <div className="flex items-center justify-between gap-3 px-1 pb-3">
-              <div>
-                <p className="text-[10px] font-semibold uppercase tracking-[0.28em] text-cyan-200/80">
-                  Event Rail
-                </p>
-                <p className="mt-1 text-xs text-slate-400">
-                  Latest mapped flashpoints
-                </p>
-              </div>
-              <span className="rounded-full border border-white/10 bg-white/[0.06] px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.22em] text-slate-300">
-                {events.length}
-              </span>
-            </div>
-
-            <div className="space-y-2">
-              {events.slice(0, 4).map((event) => (
-                <button
-                  key={event.id}
-                  type="button"
-                  onClick={() => setSelectedEvent(event)}
-                  className={`flex w-full items-start justify-between gap-3 rounded-[1.2rem] border px-3 py-3 text-left transition duration-300 ${
-                    selectedEvent?.id === event.id
-                      ? "border-cyan-300/30 bg-cyan-300/10 shadow-[0_12px_40px_rgba(34,211,238,0.12)]"
-                      : "border-white/10 bg-white/[0.04] hover:border-white/20 hover:bg-white/[0.07]"
-                  }`}
-                >
-                  <div className="min-w-0">
-                    <p className="text-sm font-medium leading-5 text-white">
-                      {event.title}
-                    </p>
-                    <p className="mt-1 text-xs text-slate-400">
-                      {new Date(event.created_at).toLocaleDateString(undefined, {
-                        month: "short",
-                        day: "numeric",
-                      })}
-                    </p>
-                  </div>
-                  <span className="shrink-0 rounded-full border border-white/10 bg-slate-950/70 px-2 py-1 text-[10px] font-semibold uppercase tracking-[0.2em] text-slate-300">
-                    {event.story_count} src
+          <div className="max-h-[40vh] space-y-1 overflow-y-auto">
+            {events.map((event) => (
+              <button
+                key={event.id}
+                type="button"
+                onClick={() => setSelectedEvent(event)}
+                className={`group flex w-full items-start justify-between gap-3 rounded-lg border-l-2 px-4 py-3 text-left transition-all ${
+                  selectedEvent?.id === event.id
+                    ? "border-white bg-white/[0.05]"
+                    : "border-transparent hover:border-white/20 hover:bg-white/[0.02]"
+                }`}
+              >
+                <div className="min-w-0 animate-fade-in-up">
+                  <p className={`truncate text-sm transition-colors ${selectedEvent?.id === event.id ? "text-white font-medium" : "text-slate-400 group-hover:text-slate-300"}`}>
+                    {event.title}
+                  </p>
+                  <p className="mt-1 text-[10px] text-slate-600 uppercase tracking-wider">
+                    {new Date(event.created_at).toLocaleDateString(undefined, {
+                      month: "short",
+                      day: "numeric",
+                    })}
+                  </p>
+                </div>
+                <div className="flex shrink-0 items-center gap-3">
+                  <SourceDiversityRing slices={event.source_diversity ?? []} />
+                  <span
+                    className={`text-[10px] font-medium tracking-widest transition-colors ${
+                      selectedEvent?.id === event.id ? "text-white" : "text-slate-500"
+                    }`}
+                  >
+                    {event.story_count} SRC
                   </span>
-                </button>
-              ))}
-            </div>
+                </div>
+              </button>
+            ))}
           </div>
         </div>
       </section>
 
+      {/* Bottom Timeline Strip */}
+      <section className={`pointer-events-none absolute inset-x-0 bottom-5 z-10 px-6 md:px-10 ${selectedEvent && showPanelMobile ? "hidden md:block" : "block"}`}>
+        <div className="pointer-events-auto w-full">
+          <EventTimeline
+            perspectives={eventDetails?.perspectives ?? []}
+            isLoading={isLoadingEvents || isLoadingDetails}
+          />
+        </div>
+      </section>
+
+      {/* Right Side Panel */}
       <aside
         className={`${panelBaseClass} ${
-          selectedEvent
-            ? "translate-x-0 opacity-100"
+          selectedEvent || error
+            ? showPanelMobile
+              ? "translate-x-0 opacity-100"
+              : "translate-x-[110%] opacity-0 md:translate-x-0 md:opacity-100"
             : "translate-x-[110%] opacity-0"
         }`}
       >
-        <div className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-cyan-300/80 to-transparent" />
-
-        <div className="flex h-full flex-col">
-          <div className="border-b border-white/10 px-6 py-5">
+        <div className="flex h-full flex-col relative z-10">
+          <div className="border-b border-white/[0.08] px-6 py-5">
             <div className="flex items-start justify-between gap-4">
-              <div>
-                <p className="text-[10px] font-semibold uppercase tracking-[0.32em] text-cyan-200/80">
-                  Event Comparison
+              <div className="min-w-0 animate-fade-in-up">
+                <p className="text-[10px] font-semibold uppercase tracking-[0.25em] text-slate-400">
+                  Perspective Analysis
                 </p>
-                <h2 className="mt-3 text-2xl font-semibold tracking-tight text-white">
-                  {eventDetails?.event_title ?? selectedEvent?.title ?? "Loading"}
+                <h2 className="mt-2 text-xl font-medium tracking-tight text-white leading-snug">
+                  {eventDetails?.event_title ?? selectedEvent?.title ?? "Loading..."}
                 </h2>
                 {eventDetails ? (
-                  <p className="mt-2 text-sm text-slate-400">
-                    {eventDetails.event_coordinates.lat.toFixed(2)},{" "}
-                    {eventDetails.event_coordinates.lng.toFixed(2)}
+                  <p className="mt-2 text-xs text-slate-500">
+                    Epicenter: {eventDetails.event_coordinates.lat.toFixed(2)}, {eventDetails.event_coordinates.lng.toFixed(2)}
                   </p>
                 ) : null}
               </div>
@@ -268,103 +278,103 @@ export default function HomePage() {
                 <button
                   type="button"
                   onClick={() => setSelectedEvent(null)}
-                  className="pointer-events-auto rounded-full border border-white/10 bg-white/[0.06] px-3 py-2 text-xs font-semibold uppercase tracking-[0.24em] text-slate-300 transition hover:border-white/20 hover:text-white"
+                  className="shrink-0 p-2 text-slate-500 transition-colors hover:text-white"
+                  aria-label="Close panel"
                 >
-                  Close
+                  <svg width="14" height="14" viewBox="0 0 14 14" fill="none" xmlns="http://www.w3.org/2000/svg">
+                    <path d="M13 1L1 13M1 1L13 13" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+                  </svg>
                 </button>
               ) : null}
             </div>
           </div>
 
-          <div className="flex-1 overflow-y-auto px-6 py-5">
+          <div className="flex-1 overflow-y-auto px-6 py-6 pb-12">
             {error ? (
-              <PanelState
-                eyebrow="Data fault"
-                title="Backend request failed"
-                body={error}
-              />
+              <PanelState title="System Error" body={error} />
             ) : isLoadingEvents || isLoadingDetails ? (
-              <PanelState
-                eyebrow="Syncing"
-                title="Pulling live perspectives"
-                body="Reading event markers, coverage geometry, and source framing from backend."
-              />
-            ) : eventDetails?.perspectives.length ? (
-              <div className="space-y-5">
-                <div className="grid gap-3 sm:grid-cols-2">
-                  <MetricPanel
-                    label="Perspective count"
-                    value={eventDetails.perspectives.length}
-                  />
-                  <MetricPanel
-                    label="Strongest proximity"
-                    value={Math.max(
-                      ...eventDetails.perspectives.map(
-                        (item) => item.alignment.proximity_score,
-                      ),
-                    )}
-                  />
-                </div>
-                <div className="rounded-[1.5rem] border border-white/10 bg-white/[0.04] p-4">
-                  <div className="flex flex-wrap items-start justify-between gap-3">
-                    <div>
-                      <p className="text-[10px] font-semibold uppercase tracking-[0.28em] text-cyan-200/80">
-                        Event Snapshot
-                      </p>
-                      <p className="mt-2 text-sm leading-6 text-slate-300">
-                        Comparing {eventDetails.perspectives.length} coverage
-                        angles across physically near and distant outlets for{" "}
-                        {eventDetails.event_title}.
-                      </p>
-                    </div>
+              <PanelState title="Aggregating Coverage" body="Loading perspectives..." />
+            ) : selectedEvent && eventDetails?.perspectives.length ? (
+                <div className="animate-fade-in space-y-8">
+                
+                {headlineStats.avgProximity < 30 && (
+                  <div className="flex items-center gap-3 rounded-xl border border-amber-500/20 bg-amber-500/5 px-4 py-3 text-amber-200/80">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                      <circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/>
+                    </svg>
+                    <p className="text-[11px] font-medium leading-tight">
+                      Coverage Gap: This event has no coverage from local sources near the epicenter.
+                    </p>
+                  </div>
+                )}
 
-                    <div className="pointer-events-auto inline-flex rounded-full border border-white/10 bg-slate-950/70 p-1">
-                      <SortButton
-                        active={perspectiveSort === "recency"}
-                        label="Recency"
-                        onClick={() => setPerspectiveSort("recency")}
-                      />
-                      <SortButton
-                        active={perspectiveSort === "proximity"}
-                        label="Proximity"
-                        onClick={() => setPerspectiveSort("proximity")}
-                      />
-                    </div>
+                <div className="flex items-center justify-between border-b border-white/[0.04] pb-4">
+                  <p className="text-[10px] font-semibold uppercase tracking-[0.2em] text-slate-500">
+                    {eventDetails.perspectives.length} Perspectives
+                  </p>
+                  <div className="flex items-center gap-2">
+                    <SortButton active={perspectiveSort === "recency"} label="Recency" onClick={() => setPerspectiveSort("recency")} />
+                    <SortButton active={perspectiveSort === "proximity"} label="Proximity" onClick={() => setPerspectiveSort("proximity")} />
                   </div>
                 </div>
-                <PerspectiveGrid perspectives={sortedPerspectives} />
+
+                <div className="animate-fade-in-up [animation-delay:150ms] opacity-0">
+                  <ContradictionPanel eventId={selectedEvent.id} apiBaseUrl={API_BASE_URL} />
+                </div>
+                
+                <div className="animate-fade-in-up [animation-delay:200ms] opacity-0">
+                  <PerspectiveGrid 
+                    perspectives={sortedPerspectives} 
+                    selectedIds={selectedPerspectives}
+                    onToggle={togglePerspective}
+                  />
+                </div>
               </div>
             ) : (
-              <PanelState
-                eyebrow="No coverage"
-                title="No perspectives mapped yet"
-                body="Stories exist for none of the selected event markers. Seed database or ingest new coverage."
-              />
+              <PanelState title="No Coverage" body="No coverage anchors detected for this marker." />
             )}
           </div>
         </div>
       </aside>
+
+      {/* Mobile Floating Toggle Button */}
+      {selectedEvent && (
+        <button
+          type="button"
+          onClick={() => setShowPanelMobile((prev) => !prev)}
+          className="fixed bottom-6 left-1/2 z-50 -translate-x-1/2 flex items-center gap-2 rounded-full border border-white/10 bg-[#0f172a]/95 px-6 py-3 text-[10px] font-semibold uppercase tracking-widest text-white shadow-2xl backdrop-blur-md transition-all active:scale-95 md:hidden"
+        >
+          {showPanelMobile ? (
+            <>
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <polygon points="1 6 1 22 8 18 16 22 23 18 23 2 16 6 8 2 1 6"/>
+                <line x1="8" y1="2" x2="8" y2="18"/>
+                <line x1="16" y1="6" x2="16" y2="22"/>
+              </svg>
+              <span>View Globe</span>
+            </>
+          ) : (
+            <>
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M21 21H3V3"/>
+                <path d="M21 9l-7 7-4-4-4 4"/>
+              </svg>
+              <span>View Analysis</span>
+            </>
+          )}
+        </button>
+      )}
     </main>
   );
 }
 
-function SortButton({
-  active,
-  label,
-  onClick,
-}: {
-  active: boolean;
-  label: string;
-  onClick: () => void;
-}) {
+function SortButton({ active, label, onClick }: { active: boolean; label: string; onClick: () => void }) {
   return (
     <button
       type="button"
       onClick={onClick}
-      className={`rounded-full px-3 py-2 text-[10px] font-semibold uppercase tracking-[0.24em] transition ${
-        active
-          ? "bg-cyan-300 text-slate-950"
-          : "text-slate-300 hover:text-white"
+      className={`text-[10px] font-semibold uppercase tracking-widest transition-colors ${
+        active ? "text-white" : "text-slate-600 hover:text-slate-400"
       }`}
     >
       {label}
@@ -372,58 +382,11 @@ function SortButton({
   );
 }
 
-function MetricCard({
-  label,
-  value,
-}: {
-  label: string;
-  value: number | string;
-}) {
+function PanelState({ title, body }: { title: string; body: string }) {
   return (
-    <div className="rounded-[1.4rem] border border-white/10 bg-white/[0.06] px-4 py-4 backdrop-blur-xl">
-      <p className="text-[10px] font-semibold uppercase tracking-[0.24em] text-slate-400">
-        {label}
-      </p>
-      <p className="mt-2 text-2xl font-semibold text-white">{value}</p>
-    </div>
-  );
-}
-
-function MetricPanel({
-  label,
-  value,
-}: {
-  label: string;
-  value: number | string;
-}) {
-  return (
-    <div className="rounded-[1.4rem] border border-white/10 bg-white/[0.06] px-4 py-4">
-      <p className="text-[10px] font-semibold uppercase tracking-[0.24em] text-slate-500">
-        {label}
-      </p>
-      <p className="mt-2 text-2xl font-semibold text-white">{value}</p>
-    </div>
-  );
-}
-
-function PanelState({
-  eyebrow,
-  title,
-  body,
-}: {
-  eyebrow: string;
-  title: string;
-  body: string;
-}) {
-  return (
-    <div className="flex h-full min-h-72 items-center justify-center">
-      <div className="max-w-sm rounded-[1.8rem] border border-white/10 bg-white/5 p-6 text-center">
-        <p className="text-[10px] font-semibold uppercase tracking-[0.3em] text-cyan-200/70">
-          {eyebrow}
-        </p>
-        <h3 className="mt-3 text-2xl font-semibold text-white">{title}</h3>
-        <p className="mt-3 text-sm leading-6 text-slate-400">{body}</p>
-      </div>
+    <div className="animate-fade-in flex h-full min-h-[16rem] flex-col items-center justify-center text-center">
+      <h3 className="text-sm font-medium text-white">{title}</h3>
+      <p className="mt-2 text-xs text-slate-500">{body}</p>
     </div>
   );
 }
