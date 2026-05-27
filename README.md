@@ -450,7 +450,3 @@ Natural next steps for Terrain:
 - production scheduler / queue setup
 - better non-English ingestion and translation
 - CI, tests, and deployment docs
-
-## License
-
-No license file is currently present in this repository. Add one before open-source distribution or public reuse.
