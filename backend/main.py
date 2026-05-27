@@ -1,35 +1,44 @@
 """
-Terrain MVP — FastAPI Backend
-=============================
-POST /api/analyze-event  →  Returns multi-perspective analysis for a
-geopolitical event, powered by Groq (Llama 3 70B).
+Terrain API.
 """
 
 import asyncio
-import uuid
+import logging
+import os
+import socket
 from concurrent.futures import ThreadPoolExecutor
+from functools import partial
+from urllib.parse import urlparse, urlunparse
 
+import psycopg2
+from psycopg2.extras import RealDictCursor
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 
+from agents import analyze_article, build_alignment_data
+from ingestion import sync_external_news
 from models import (
-    AnalyzeEventRequest,
-    AnalyzeEventResponse,
+    Article,
+    BatchIngestRequest,
+    BatchIngestResponse,
+    EventMarker,
+    EventPerspectiveResponse,
+    ExternalSyncRequest,
+    ExternalSyncResponse,
+    IngestArticleInput,
+    IngestResult,
     Perspective,
     Source,
-    Article,
 )
-from agents import analyze_article, calculate_proximity_score
-
-# ── App Setup ───────────────────────────────────────────────────
 
 app = FastAPI(
     title="Terrain API",
-    version="0.2.0",
+    version="0.3.0",
     description="Geo-anchored, source-transparent news intelligence API.",
 )
 
-# Allow the Next.js dev server to call us
+logger = logging.getLogger("terrain.api")
+
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["http://localhost:3000"],
@@ -38,141 +47,535 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Thread pool for running synchronous Groq calls concurrently
-_executor = ThreadPoolExecutor(max_workers=3)
+_executor = ThreadPoolExecutor(max_workers=4)
+_sync_task: asyncio.Task | None = None
 
 
-# ── Event & Source Coordinates ────────────────────────────────────────
-# Provided by Codex. Used with Haversine formula to compute proximity scores.
-
-EVENT_LAT = 28.6139   # New Delhi (Delimitation Act epicentre)
-EVENT_LNG = 77.2090
-
-# (source_lat, source_lng) per article, in order: South, North, International
-SOURCE_COORDS = [
-    (13.0827, 80.2707),   # The Hindu — Chennai
-    (26.8467, 80.9462),   # Dainik Jagran — Lucknow
-    (51.5074, -0.1278),   # BBC News — London
-]
+def get_db_url() -> str:
+    db_url = os.getenv("SUPABASE_DB_URL") or os.getenv("DATABASE_URL")
+    if not db_url:
+        raise HTTPException(
+            status_code=500,
+            detail="Database URL missing. Set SUPABASE_DB_URL or DATABASE_URL.",
+        )
+    return db_url
 
 
-# ── Simulated Raw Article Texts ─────────────────────────────────
-# Three brief simulated news excerpts about the Indian Delimitation Act,
-# each written from a distinct editorial perspective.
-
-ARTICLE_PRO_SOUTH = """
-SOURCE: The Hindu | Chennai, India
-HEADLINE: Demographic success shouldn't mean political marginalisation
-
-The southern states of India — Tamil Nadu, Kerala, Karnataka, Andhra Pradesh, 
-and Telangana — are staring at a democratic paradox. Having invested decades in 
-public health, education, and family planning, these states successfully brought 
-their population growth rates well below the national average. Now, the upcoming 
-delimitation exercise threatens to punish them for that very success.
-
-Under the proposed reapportionment, parliamentary seats would be redistributed 
-based on the 2026 census. This means the south, with its slower population growth, 
-stands to lose dozens of Lok Sabha seats to the more populous northern states. 
-Chief Ministers from the region have called this "a penalty for good governance."
-
-Southern states already contribute disproportionately to India's GDP and tax 
-revenues. Losing political representation while subsidising the north financially 
-has ignited fears of a fiscal and democratic double blow. "We followed the nation's 
-policy. Now we are being told our reward is irrelevance," said a senior leader 
-from Tamil Nadu.
-"""
-
-ARTICLE_PRO_NORTH = """
-SOURCE: Dainik Jagran | Lucknow, India
-HEADLINE: One Citizen, One Vote: The Need for Fair Representation
-
-For over five decades, the people of Uttar Pradesh, Bihar, Madhya Pradesh, and 
-Rajasthan have been denied their rightful share of democratic representation. The 
-constitutional freeze on seat allocation, in place since 1976, was meant to be 
-temporary. It has instead become a permanent injustice.
-
-Today, a single MP in UP represents nearly 2.5 million people, while an MP in 
-Kerala represents under 1.8 million. This is not democracy — it is structural 
-inequality dressed in constitutional language.
-
-The principle of "one citizen, one vote" demands that representation reflect 
-population. Delimitation is not a favour to the north — it is a constitutional 
-correction long overdue. The northern states have borne the burden of 
-underrepresentation silently while being labelled as "backward" by those who 
-benefit from the freeze. The upcoming census and delimitation commission must 
-finally deliver equal weight to every Indian citizen's vote.
-"""
-
-ARTICLE_INTERNATIONAL = """
-SOURCE: BBC News | London, United Kingdom
-HEADLINE: India's looming constitutional crisis over political seats
-
-India faces what analysts describe as its most significant constitutional 
-challenge in decades. A scheduled delimitation exercise — the redrawing of 
-parliamentary constituency boundaries based on updated population data — has 
-exposed a deep fault line between the country's prosperous south and its 
-populous north.
-
-Southern states, which successfully controlled population growth and now drive 
-much of India's economic output, fear losing parliamentary seats to northern 
-states with larger populations but lower per-capita income and development 
-indicators.
-
-Northern leaders counter that the current allocation, frozen since 1976, 
-fundamentally violates the democratic principle of equal representation. 
-"You cannot have a democracy where some votes count more than others," 
-said a constitutional scholar at Delhi University.
-
-The dispute has reignited debates about Indian federalism, fiscal transfers 
-between states, and whether the country's parliamentary system can accommodate 
-the vastly different trajectories of its regions. Some analysts warn that 
-mishandling this process could fuel secessionist sentiments in the south.
-"""
+def get_auto_sync_enabled() -> bool:
+    return os.getenv("AUTO_SYNC_ENABLED", "false").strip().lower() in {
+        "1",
+        "true",
+        "yes",
+        "on",
+    }
 
 
-# ── Endpoints ───────────────────────────────────────────────────
+def build_auto_sync_request() -> ExternalSyncRequest:
+    return ExternalSyncRequest(
+        limit=int(os.getenv("AUTO_SYNC_LIMIT", "25")),
+        gdelt_timespan_minutes=int(os.getenv("AUTO_SYNC_GDELT_TIMESPAN_MINUTES", "120")),
+        gdelt_maxrows=int(os.getenv("AUTO_SYNC_GDELT_MAXROWS", "500")),
+    )
 
-@app.post("/api/analyze-event", response_model=AnalyzeEventResponse)
-async def analyze_event(request: AnalyzeEventRequest):
+
+def get_auto_sync_interval_seconds() -> int:
+    minutes = int(os.getenv("AUTO_SYNC_INTERVAL_MINUTES", "20"))
+    return max(15, minutes) * 60
+
+
+def get_connection():
+    """Connect to the database, resolving IPv6 if no IPv4 record exists."""
+    db_url = get_db_url()
+    parsed = urlparse(db_url)
+    hostname = parsed.hostname
+
+    # Try to resolve the host — prefer IPv6 since Supabase direct hosts
+    # often only have AAAA records and no A records.
+    try:
+        # Try IPv4 first
+        infos = socket.getaddrinfo(hostname, parsed.port or 5432, socket.AF_INET)
+        resolved_ip = infos[0][4][0]
+    except socket.gaierror:
+        # Fall back to IPv6
+        infos = socket.getaddrinfo(hostname, parsed.port or 5432, socket.AF_INET6)
+        resolved_ip = infos[0][4][0]
+
+    # Rebuild the URL with the resolved IP (bracket IPv6 addresses)
+    if ":" in resolved_ip:
+        netloc_host = f"[{resolved_ip}]"
+    else:
+        netloc_host = resolved_ip
+
+    # Reconstruct netloc: user:pass@host:port
+    userinfo = ""
+    if parsed.username:
+        userinfo = parsed.username
+        if parsed.password:
+            userinfo += f":{parsed.password}"
+        userinfo += "@"
+
+    port = parsed.port or 5432
+    new_netloc = f"{userinfo}{netloc_host}:{port}"
+    resolved_url = urlunparse(parsed._replace(netloc=new_netloc))
+
+    return psycopg2.connect(resolved_url, cursor_factory=RealDictCursor)
+
+
+def fetch_event_markers_from_db():
+    query = """
+        SELECT
+            e.id::text,
+            e.title,
+            e.lat,
+            e.lng,
+            e.created_at,
+            COUNT(st.id)::int AS story_count
+        FROM events e
+        LEFT JOIN stories st ON st.event_id = e.id
+        GROUP BY e.id
+        ORDER BY e.created_at DESC
+        LIMIT 100
     """
-    Analyze a geopolitical event through multiple editorial lenses.
 
-    Sends three simulated article texts to Groq (Llama 3 70B) in parallel
-    and returns structured multi-perspective analysis.
+    with get_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute(query)
+            return cur.fetchall()
+
+
+def fetch_event_with_stories(event_id: str):
+    event_query = """
+        SELECT
+            id::text,
+            title,
+            lat,
+            lng
+        FROM events
+        WHERE id = %s
+        LIMIT 1
     """
-    loop = asyncio.get_event_loop()
+
+    stories_query = """
+        SELECT
+            st.id::text AS story_id,
+            st.url,
+            st.content,
+            st.created_at,
+            src.id::text AS source_id,
+            src.name AS source_name,
+            COALESCE(src.country, 'Unknown') AS source_country,
+            COALESCE(src.funding_type, 'Mixed') AS funding_type,
+            src.lat AS source_lat,
+            src.lng AS source_lng
+        FROM stories st
+        JOIN sources src ON src.id = st.source_id
+        WHERE st.event_id = %s
+        ORDER BY st.created_at DESC
+    """
+
+    with get_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute(event_query, (event_id,))
+            event = cur.fetchone()
+
+            if event is None:
+                return None, []
+
+            cur.execute(stories_query, (event_id,))
+            stories = cur.fetchall()
+            return event, stories
+
+
+def upsert_event(cur, article: IngestArticleInput):
+    event = article.event
+
+    if event.id:
+        cur.execute(
+            """
+            UPDATE events
+            SET title = %s, lat = %s, lng = %s
+            WHERE id = %s
+            RETURNING id::text, title, lat, lng
+            """,
+            (
+                event.title,
+                event.coordinates.lat,
+                event.coordinates.lng,
+                event.id,
+            ),
+        )
+        existing = cur.fetchone()
+        if existing:
+            return existing, False
+
+    cur.execute(
+        """
+        SELECT id::text, title, lat, lng
+        FROM events
+        WHERE LOWER(title) = LOWER(%s)
+          AND ABS(lat - %s) < 0.01
+          AND ABS(lng - %s) < 0.01
+        LIMIT 1
+        """,
+        (event.title, event.coordinates.lat, event.coordinates.lng),
+    )
+    existing = cur.fetchone()
+    if existing:
+        return existing, False
+
+    cur.execute(
+        """
+        INSERT INTO events (title, lat, lng)
+        VALUES (%s, %s, %s)
+        RETURNING id::text, title, lat, lng
+        """,
+        (event.title, event.coordinates.lat, event.coordinates.lng),
+    )
+    return cur.fetchone(), True
+
+
+def upsert_source(cur, article: IngestArticleInput):
+    source = article.source
+
+    cur.execute(
+        """
+        SELECT id::text, name, country, funding_type, lat, lng
+        FROM sources
+        WHERE LOWER(name) = LOWER(%s)
+          AND LOWER(COALESCE(country, '')) = LOWER(%s)
+        LIMIT 1
+        """,
+        (source.name, source.country),
+    )
+    existing = cur.fetchone()
+    if existing:
+        cur.execute(
+            """
+            UPDATE sources
+            SET funding_type = %s, lat = %s, lng = %s
+            WHERE id = %s
+            RETURNING id::text, name, country, funding_type, lat, lng
+            """,
+            (
+                source.funding_type,
+                source.coordinates.lat,
+                source.coordinates.lng,
+                existing["id"],
+            ),
+        )
+        return cur.fetchone(), False
+
+    cur.execute(
+        """
+        INSERT INTO sources (name, country, funding_type, lat, lng)
+        VALUES (%s, %s, %s, %s, %s)
+        RETURNING id::text, name, country, funding_type, lat, lng
+        """,
+        (
+            source.name,
+            source.country,
+            source.funding_type,
+            source.coordinates.lat,
+            source.coordinates.lng,
+        ),
+    )
+    return cur.fetchone(), True
+
+
+def upsert_story(
+    cur,
+    article: IngestArticleInput,
+    event_id: str,
+    source_id: str,
+    proximity_score: int,
+):
+    if article.url:
+        cur.execute(
+            """
+            SELECT id::text
+            FROM stories
+            WHERE url = %s
+            LIMIT 1
+            """,
+            (article.url,),
+        )
+        existing = cur.fetchone()
+        if existing:
+            cur.execute(
+                """
+                UPDATE stories
+                SET
+                    event_id = %s,
+                    source_id = %s,
+                    content = %s,
+                    proximity_score = %s,
+                    created_at = COALESCE(%s, created_at)
+                WHERE id = %s
+                RETURNING id::text
+                """,
+                (
+                    event_id,
+                    source_id,
+                    article.content,
+                    proximity_score,
+                    article.published_at,
+                    existing["id"],
+                ),
+            )
+            return cur.fetchone()["id"], False
+
+    cur.execute(
+        """
+        INSERT INTO stories (event_id, source_id, content, url, proximity_score, created_at)
+        VALUES (%s, %s, %s, %s, %s, COALESCE(%s, CURRENT_TIMESTAMP))
+        RETURNING id::text
+        """,
+        (
+            event_id,
+            source_id,
+            article.content,
+            article.url,
+            proximity_score,
+            article.published_at,
+        ),
+    )
+    return cur.fetchone()["id"], True
+
+
+def ingest_article(article: IngestArticleInput) -> IngestResult:
+    with get_connection() as conn:
+        with conn.cursor() as cur:
+            event_row, created_event = upsert_event(cur, article)
+            source_row, created_source = upsert_source(cur, article)
+            alignment = build_alignment_data(
+                event_row["lat"],
+                event_row["lng"],
+                source_row["lat"],
+                source_row["lng"],
+            )
+            story_id, created_story = upsert_story(
+                cur,
+                article,
+                event_row["id"],
+                source_row["id"],
+                alignment["proximity_score"],
+            )
+        conn.commit()
+
+    return IngestResult(
+        event_id=event_row["id"],
+        story_id=story_id,
+        source_id=source_row["id"],
+        created_event=created_event,
+        created_source=created_source,
+        created_story=created_story,
+        alignment=alignment,
+    )
+
+
+async def auto_sync_loop():
+    interval_seconds = get_auto_sync_interval_seconds()
+    logger.info("Auto-sync loop started with interval=%ss", interval_seconds)
+
+    while True:
+        try:
+            result = await asyncio.get_running_loop().run_in_executor(
+                _executor,
+                partial(
+                    sync_external_news,
+                    build_auto_sync_request(),
+                    ingest_article,
+                    get_db_connection=get_connection,
+                ),
+            )
+            logger.info(
+                "Auto-sync complete attempted=%s inserted=%s updated=%s gdelt_matches=%s failed_feeds=%s",
+                result.attempted,
+                result.inserted,
+                result.updated,
+                result.gdelt_matches,
+                ",".join(result.failed_feeds) if result.failed_feeds else "none",
+            )
+        except asyncio.CancelledError:
+            raise
+        except Exception:
+            logger.exception("Auto-sync failed")
+
+        await asyncio.sleep(interval_seconds)
+
+
+@app.on_event("startup")
+async def start_background_sync():
+    global _sync_task
+
+    if not get_auto_sync_enabled():
+        logger.info("Auto-sync disabled")
+        return
+
+    if _sync_task and not _sync_task.done():
+        return
+
+    _sync_task = asyncio.create_task(auto_sync_loop())
+
+
+@app.on_event("shutdown")
+async def stop_background_sync():
+    global _sync_task
+
+    if not _sync_task:
+        return
+
+    _sync_task.cancel()
+    try:
+        await _sync_task
+    except asyncio.CancelledError:
+        pass
+    finally:
+        _sync_task = None
+
+
+@app.get("/api/events", response_model=list[EventMarker])
+async def get_events():
+    try:
+        rows = fetch_event_markers_from_db()
+    except HTTPException:
+        raise
+    except Exception as exc:
+        raise HTTPException(status_code=502, detail=f"Database query failed: {exc}")
+
+    return [EventMarker(**row) for row in rows]
+
+
+@app.get("/api/events/{event_id}/perspectives", response_model=EventPerspectiveResponse)
+async def get_event_perspectives(event_id: str):
+    try:
+        event, stories = fetch_event_with_stories(event_id)
+    except HTTPException:
+        raise
+    except Exception as exc:
+        raise HTTPException(status_code=502, detail=f"Database query failed: {exc}")
+
+    if event is None:
+        raise HTTPException(status_code=404, detail="Event not found.")
+
+    loop = asyncio.get_running_loop()
+
+    tasks = [
+        loop.run_in_executor(
+            _executor,
+            partial(
+                analyze_article,
+                story["content"] or "",
+                source_name=story["source_name"],
+                source_country=story["source_country"],
+                funding_type=story["funding_type"],
+            ),
+        )
+        for story in stories
+    ]
 
     try:
-        # Run all 3 LLM calls concurrently via thread pool
-        results = await asyncio.gather(
-            loop.run_in_executor(_executor, analyze_article, ARTICLE_PRO_SOUTH),
-            loop.run_in_executor(_executor, analyze_article, ARTICLE_PRO_NORTH),
-            loop.run_in_executor(_executor, analyze_article, ARTICLE_INTERNATIONAL),
-        )
-    except Exception as e:
-        raise HTTPException(status_code=502, detail=f"LLM analysis failed: {str(e)}")
+        analyses = await asyncio.gather(*tasks)
+    except Exception as exc:
+        raise HTTPException(status_code=502, detail=f"Perspective extraction failed: {exc}")
 
-    # Map raw JSON dicts → Pydantic models, overriding proximity_score
-    # with the deterministic Haversine value (not the LLM's guess).
-    perspectives = []
-    for raw, (src_lat, src_lng) in zip(results, SOURCE_COORDS):
-        score = calculate_proximity_score(EVENT_LAT, EVENT_LNG, src_lat, src_lng)
-        source_data = {**raw["source"], "proximity_score": score}
-        perspective = Perspective(
-            source=Source(**source_data),
-            article=Article(**raw["article"]),
-        )
-        perspectives.append(perspective)
+    perspectives: list[Perspective] = []
 
-    return AnalyzeEventResponse(
-        event_id=f"evt_{uuid.uuid4().hex[:12]}",
-        event_title="India's Delimitation Act Crisis",
+    for story, analysis in zip(stories, analyses):
+        alignment = build_alignment_data(
+            event["lat"],
+            event["lng"],
+            story["source_lat"],
+            story["source_lng"],
+        )
+        source_payload = {
+            "id": story["source_id"],
+            # DB is source of truth for identity fields; LLM is only a fallback
+            "name": story["source_name"] or analysis["source"]["name"],
+            "country": story["source_country"] or analysis["source"]["country"],
+            "funding_type": story["funding_type"] or analysis["source"]["funding_type"],
+            "proximity_score": alignment["proximity_score"],
+            "distance_km": alignment["distance_km"],
+            "lat": story["source_lat"],
+            "lng": story["source_lng"],
+        }
+        article_payload = {
+            **analysis["article"],
+            "content": (story["content"] or "").strip(),
+        }
+        perspectives.append(
+            Perspective(
+                story_id=story["story_id"],
+                created_at=story["created_at"],
+                url=story["url"],
+                alignment=alignment,
+                source=Source(**source_payload),
+                article=Article(**article_payload),
+            )
+        )
+
+    return EventPerspectiveResponse(
+        event_id=event["id"],
+        event_title=event["title"],
+        event_coordinates={"lat": event["lat"], "lng": event["lng"]},
         perspectives=perspectives,
     )
 
 
-# ── Health Check ────────────────────────────────────────────────
+@app.post("/api/ingest/article", response_model=IngestResult)
+async def ingest_single_article(article: IngestArticleInput):
+    try:
+        return await asyncio.get_running_loop().run_in_executor(
+            _executor,
+            partial(ingest_article, article),
+        )
+    except Exception as exc:
+        raise HTTPException(status_code=502, detail=f"Ingest failed: {exc}")
+
+
+@app.post("/api/ingest/articles", response_model=BatchIngestResponse)
+async def ingest_articles(payload: BatchIngestRequest):
+    loop = asyncio.get_running_loop()
+
+    try:
+        results = await asyncio.gather(
+            *[
+                loop.run_in_executor(_executor, partial(ingest_article, article))
+                for article in payload.articles
+            ]
+        )
+    except Exception as exc:
+        raise HTTPException(status_code=502, detail=f"Batch ingest failed: {exc}")
+
+    inserted = sum(1 for result in results if result.created_story)
+    updated = len(results) - inserted
+    return BatchIngestResponse(inserted=inserted, updated=updated, results=results)
+
+
+@app.post("/api/ingest/sync", response_model=ExternalSyncResponse)
+async def sync_external_ingest(payload: ExternalSyncRequest):
+    try:
+        return await asyncio.get_running_loop().run_in_executor(
+            _executor,
+            partial(
+                sync_external_news,
+                payload,
+                ingest_article,
+                get_db_connection=get_connection,
+            ),
+        )
+    except Exception as exc:
+        raise HTTPException(status_code=502, detail=f"External sync failed: {exc}")
+
 
 @app.get("/health")
 async def health_check():
-    return {"status": "ok", "version": "0.2.0"}
+    try:
+        with get_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute("SELECT 1 AS ok")
+                cur.fetchone()
+    except Exception as exc:
+        return {"status": "degraded", "version": "0.3.0", "detail": str(exc)}
+
+    return {"status": "ok", "version": "0.3.0"}

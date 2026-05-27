@@ -2,7 +2,7 @@ import "./globals.css";
 import type { ReactNode } from "react";
 
 export const metadata = {
-  title: "Terrain MVP",
+  title: "Terrain V2",
   description: "Geo-anchored, source-transparent news intelligence.",
 };
 
@@ -13,7 +13,9 @@ export default function RootLayout({
 }) {
   return (
     <html lang="en">
-      <body className="bg-slate-50 text-slate-900">{children}</body>
+      <body className="min-h-screen bg-[#020617] text-white antialiased">
+        {children}
+      </body>
     </html>
   );
 }
