@@ -74,7 +74,7 @@ export function ExploreView({
             </svg>
           </div>
           <div>
-            <h1 className="text-sm font-semibold tracking-wider text-white uppercase">
+            <h1 className="text-sm font-bold tracking-[0.25em] bg-gradient-to-r from-cyan-400 via-blue-400 to-purple-400 bg-clip-text text-transparent uppercase">
               Terrain
             </h1>
             <p className="text-[10px] text-slate-500 tracking-wide">
@@ -84,14 +84,50 @@ export function ExploreView({
         </div>
         
         {!isLoading && (
-          <div className="flex items-center gap-3 rounded-full border border-white/[0.06] bg-white/[0.03] px-4 py-2 backdrop-blur-lg">
-            <div className="h-1.5 w-1.5 rounded-full bg-emerald-400 animate-pulse" />
-            <span className="text-[10px] font-medium tracking-widest text-slate-400 uppercase">
+          <div className="relative flex items-center gap-3 rounded-full border border-cyan-500/20 bg-cyan-500/[0.04] px-4 py-2 backdrop-blur-lg shadow-[0_0_15px_rgba(6,182,212,0.1)]">
+            <span className="relative flex h-1.5 w-1.5">
+              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-cyan-400 opacity-75"></span>
+              <span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-cyan-400"></span>
+            </span>
+            <span className="text-[10px] font-semibold tracking-widest text-cyan-400 uppercase">
               {events.length} Live Events
             </span>
           </div>
         )}
       </header>
+
+      {/* Floating HUD Legend */}
+      {!isLoading && events.length > 0 && (
+        <div className="absolute right-5 top-20 pointer-events-auto hidden sm:flex flex-col gap-2 rounded-xl border border-white/[0.06] bg-black/60 p-3.5 backdrop-blur-lg z-20">
+          <p className="text-[8px] font-bold tracking-[0.2em] text-slate-500 uppercase">Geographic Key</p>
+          <div className="grid grid-cols-2 gap-x-4 gap-y-2 mt-1">
+            <div className="flex items-center gap-2">
+              <span className="h-1.5 w-1.5 rounded-full bg-[#38bdf8]" />
+              <span className="text-[9px] text-slate-400 font-medium uppercase tracking-wider">Americas</span>
+            </div>
+            <div className="flex items-center gap-2">
+              <span className="h-1.5 w-1.5 rounded-full bg-[#a78bfa]" />
+              <span className="text-[9px] text-slate-400 font-medium uppercase tracking-wider">Europe</span>
+            </div>
+            <div className="flex items-center gap-2">
+              <span className="h-1.5 w-1.5 rounded-full bg-[#f472b6]" />
+              <span className="text-[9px] text-slate-400 font-medium uppercase tracking-wider">Mid East</span>
+            </div>
+            <div className="flex items-center gap-2">
+              <span className="h-1.5 w-1.5 rounded-full bg-[#f59e0b]" />
+              <span className="text-[9px] text-slate-400 font-medium uppercase tracking-wider">Africa</span>
+            </div>
+            <div className="flex items-center gap-2">
+              <span className="h-1.5 w-1.5 rounded-full bg-[#22d3ee]" />
+              <span className="text-[9px] text-slate-400 font-medium uppercase tracking-wider">Asia</span>
+            </div>
+            <div className="flex items-center gap-2">
+              <span className="h-1.5 w-1.5 rounded-full bg-[#34d399]" />
+              <span className="text-[9px] text-slate-400 font-medium uppercase tracking-wider">Oceania</span>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Spacer */}
       <div className="flex-1" />
@@ -196,7 +232,7 @@ export function ExploreView({
                       type="button"
                       onClick={() => onSelectEvent(event)}
                       style={{ animationDelay: `${index * 60}ms` }}
-                      className="group relative flex-shrink-0 w-[280px] md:w-[320px] snap-start rounded-xl border border-white/[0.06] bg-white/[0.03] p-4 text-left backdrop-blur-lg transition-all duration-300 hover:border-white/[0.12] hover:bg-white/[0.06] hover:-translate-y-1 hover:shadow-[0_12px_40px_rgba(0,0,0,0.4)] animate-pill-in opacity-0 active:scale-[0.98]"
+                      className="group relative flex-shrink-0 w-[280px] md:w-[320px] snap-start rounded-xl border border-white/[0.06] bg-white/[0.03] p-4 text-left backdrop-blur-lg glow-card-hover animate-pill-in opacity-0 active:scale-[0.98]"
                     >
                       {/* Glow accent */}
                       <div className="absolute inset-0 rounded-xl bg-gradient-to-br from-cyan-500/[0.04] to-purple-500/[0.04] opacity-0 group-hover:opacity-100 transition-opacity" />

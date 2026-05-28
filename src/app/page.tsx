@@ -130,7 +130,7 @@ export default function HomePage() {
   };
 
   return (
-    <main className="relative min-h-screen w-full overflow-hidden bg-[#000000] text-slate-100">
+    <main className="relative min-h-screen w-full overflow-hidden bg-[#000000] bg-dot-grid text-slate-100">
       {/* 3D Globe — always rendered, hidden via CSS when not on explore */}
       <div
         className="transition-opacity duration-700"

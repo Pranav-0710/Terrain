@@ -81,37 +81,59 @@ export function ContradictionPanel({
   if (!report) return null;
 
   return (
-    <div className="border-l border-white/[0.08] pl-5">
-      <div className="mb-6">
-        <h3 className="text-[10px] font-semibold uppercase tracking-widest text-slate-500">
-          Consensus
-        </h3>
-        <p className="mt-2 text-sm leading-relaxed text-slate-300">
+    <div className="space-y-6">
+      {/* Consensus Section */}
+      <div className="border-l-2 border-cyan-500/30 pl-4 py-1">
+        <div className="flex items-center gap-2">
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#22d3ee" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+            <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/>
+          </svg>
+          <h3 className="text-[10px] font-bold uppercase tracking-[0.2em] text-cyan-400">
+            AI Consensus Synthesis
+          </h3>
+        </div>
+        <p className="mt-2 text-[13px] leading-relaxed text-slate-300">
           {report.consensus}
         </p>
       </div>
 
+      {/* Contradictions Section */}
       {report.contradictions.length > 0 && (
-        <div className="mb-6">
-          <h3 className="text-[10px] font-semibold uppercase tracking-widest text-slate-500">
-            Contradictions
-          </h3>
-          <ul className="mt-2 space-y-3">
+        <div className="border-l-2 border-rose-500/30 pl-4 py-1">
+          <div className="flex items-center gap-2 mb-3">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#f43f5e" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/>
+              <line x1="12" y1="9" x2="12" y2="13"/>
+              <line x1="12" y1="17" x2="12.01" y2="17"/>
+            </svg>
+            <h3 className="text-[10px] font-bold uppercase tracking-[0.2em] text-rose-400">
+              Identified Friction Points
+            </h3>
+          </div>
+          <ul className="space-y-2">
             {report.contradictions.map((item, i) => (
-              <li key={i} className="flex items-start gap-3">
-                <span className="mt-2 h-px w-2 shrink-0 bg-slate-600" />
-                <p className="text-sm leading-relaxed text-slate-300">{item}</p>
+              <li key={i} className="rounded-lg border border-white/[0.04] bg-white/[0.01] p-3 flex items-start gap-3">
+                <span className="flex h-4 w-4 shrink-0 items-center justify-center rounded-full bg-rose-500/10 text-[9px] font-bold text-rose-400">
+                  {i + 1}
+                </span>
+                <p className="text-[12px] leading-relaxed text-slate-300">{item}</p>
               </li>
             ))}
           </ul>
         </div>
       )}
 
-      <div>
-        <h3 className="text-[10px] font-semibold uppercase tracking-widest text-slate-500">
-          Bias Vectors
-        </h3>
-        <p className="mt-2 text-sm italic leading-relaxed text-slate-400">
+      {/* Bias Vectors Section */}
+      <div className="border-l-2 border-purple-500/30 pl-4 py-1">
+        <div className="flex items-center gap-2">
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#c084fc" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M12 22h10M2 22h10M12 2v20M12 6h8a4 4 0 0 1 0 8h-8M12 6H4a4 4 0 0 0 0 8h8"/>
+          </svg>
+          <h3 className="text-[10px] font-bold uppercase tracking-[0.2em] text-purple-400">
+            Source Alignment & Bias Vectors
+          </h3>
+        </div>
+        <p className="mt-2 text-[12px] italic leading-relaxed text-slate-400">
           {report.bias_vectors}
         </p>
       </div>

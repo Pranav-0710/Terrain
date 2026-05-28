@@ -105,44 +105,81 @@ export function AnalysisView({
             <h2 className="text-2xl md:text-3xl font-semibold text-white leading-tight tracking-tight">
               {eventDetails.event_title}
             </h2>
-            <div className="mt-3 flex flex-wrap items-center gap-4 text-xs text-slate-500">
-              <span className="flex items-center gap-1.5">
-                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                  <circle cx="12" cy="12" r="10"/><path d="M2 12h20M12 2a15 15 0 0 1 4 10 15 15 0 0 1-4 10 15 15 0 0 1-4-10A15 15 0 0 1 12 2z"/>
-                </svg>
-                {eventDetails.event_coordinates.lat.toFixed(2)}, {eventDetails.event_coordinates.lng.toFixed(2)}
-              </span>
-              <span className="h-0.5 w-0.5 rounded-full bg-slate-600" />
-              <span>{headlineStats.sourceCount} perspectives mapped</span>
+            <div className="mt-2.5 flex items-center gap-2 text-xs text-slate-500 font-mono">
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <circle cx="12" cy="12" r="10"/><path d="M2 12h20M12 2a15 15 0 0 1 4 10 15 15 0 0 1-4 10 15 15 0 0 1-4-10A15 15 0 0 1 12 2z"/>
+              </svg>
+              <span>EPICENTER: {eventDetails.event_coordinates.lat.toFixed(4)}°N, {eventDetails.event_coordinates.lng.toFixed(4)}°E</span>
             </div>
 
-            {/* Coverage breakdown pills */}
-            <div className="mt-5 flex flex-wrap gap-2">
-              {localCount > 0 && (
-                <span className="rounded-full border border-emerald-500/20 bg-emerald-500/[0.06] px-3 py-1 text-[10px] font-medium text-emerald-400 uppercase tracking-widest">
-                  {localCount} Local
-                </span>
-              )}
-              {regionalCount > 0 && (
-                <span className="rounded-full border border-amber-500/20 bg-amber-500/[0.06] px-3 py-1 text-[10px] font-medium text-amber-400 uppercase tracking-widest">
-                  {regionalCount} Regional
-                </span>
-              )}
-              {globalCount > 0 && (
-                <span className="rounded-full border border-blue-500/20 bg-blue-500/[0.06] px-3 py-1 text-[10px] font-medium text-blue-400 uppercase tracking-widest">
-                  {globalCount} Global
-                </span>
-              )}
+            {/* Metrics Dashboard */}
+            <div className="mt-8 grid grid-cols-1 sm:grid-cols-3 gap-4">
+              {/* Card 1: Perspectives Mapped */}
+              <div className="glass-card p-4 flex flex-col justify-between glow-card-hover relative overflow-hidden group">
+                <div className="absolute top-0 right-0 p-3 opacity-10 group-hover:opacity-20 transition-opacity">
+                  <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
+                    <circle cx="12" cy="12" r="10"/><path d="M12 2a15 15 0 0 1 4 10 15 15 0 0 1-4 10 15 15 0 0 1-4-10A15 15 0 0 1 12 2z"/>
+                  </svg>
+                </div>
+                <div>
+                  <p className="text-[9px] font-bold uppercase tracking-widest text-slate-500">Perspectives</p>
+                  <p className="text-3xl font-semibold text-white mt-1 tracking-tight">{headlineStats.sourceCount}</p>
+                </div>
+                <div className="mt-3 flex items-center gap-1.5">
+                  <span className="h-1.5 w-1.5 rounded-full bg-cyan-400 animate-pulse" />
+                  <span className="text-[9px] text-slate-400 font-medium">Mapped sources</span>
+                </div>
+              </div>
+
+              {/* Card 2: Geographic Spread */}
+              <div className="glass-card p-4 flex flex-col justify-between glow-card-hover relative overflow-hidden group">
+                <div className="absolute top-0 right-0 p-3 opacity-10 group-hover:opacity-20 transition-opacity">
+                  <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
+                    <circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="4"/>
+                  </svg>
+                </div>
+                <div>
+                  <p className="text-[9px] font-bold uppercase tracking-widest text-slate-500">Geographic Spread</p>
+                  <div className="flex flex-wrap gap-1 mt-2">
+                    {localCount > 0 && <span className="rounded bg-emerald-500/10 px-1.5 py-0.5 text-[8px] font-bold text-emerald-400 uppercase tracking-wider">Local</span>}
+                    {regionalCount > 0 && <span className="rounded bg-amber-500/10 px-1.5 py-0.5 text-[8px] font-bold text-amber-400 uppercase tracking-wider">Regional</span>}
+                    {globalCount > 0 && <span className="rounded bg-blue-500/10 px-1.5 py-0.5 text-[8px] font-bold text-blue-400 uppercase tracking-wider">Global</span>}
+                  </div>
+                </div>
+                <p className="text-[9px] text-slate-400 font-medium mt-3">
+                  {((localCount ? 1 : 0) + (regionalCount ? 1 : 0) + (globalCount ? 1 : 0))} / 3 tiers active
+                </p>
+              </div>
+
+              {/* Card 3: Proximity Score */}
+              <div className="glass-card p-4 flex flex-col justify-between glow-card-hover relative overflow-hidden group">
+                <div className="absolute top-0 right-0 p-3 opacity-10 group-hover:opacity-20 transition-opacity">
+                  <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
+                    <circle cx="12" cy="12" r="8"/><path d="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/>
+                  </svg>
+                </div>
+                <div>
+                  <p className="text-[9px] font-bold uppercase tracking-widest text-slate-500">Mean Proximity</p>
+                  <p className="text-3xl font-semibold text-white mt-1 tracking-tight">
+                    {headlineStats.avgProximity}<span className="text-xs font-normal text-slate-500">/100</span>
+                  </p>
+                </div>
+                <div className="mt-3">
+                  <div className="h-1 w-full rounded-full bg-white/5 overflow-hidden">
+                    <div className="h-full bg-gradient-to-r from-cyan-400 to-purple-500 rounded-full" style={{ width: `${headlineStats.avgProximity}%` }} />
+                  </div>
+                </div>
+              </div>
             </div>
 
             {/* Coverage gap warning */}
             {headlineStats.avgProximity < 30 && (
-              <div className="mt-5 flex items-center gap-3 rounded-xl border border-amber-500/20 bg-amber-500/[0.04] px-4 py-3">
+              <div className="mt-4 flex items-center gap-3 rounded-xl border border-amber-500/20 bg-amber-500/[0.04] px-4 py-3">
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" className="text-amber-400 shrink-0">
                   <circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/>
                 </svg>
                 <p className="text-[11px] font-medium leading-tight text-amber-200/80">
-                  Coverage Gap: No coverage from sources near the epicenter.
+                  Coverage Gap: Zero active sources near the geographical epicenter.
                 </p>
               </div>
             )}
@@ -230,29 +267,32 @@ export function AnalysisView({
 
       {/* Sticky Compare CTA */}
       {selectedPerspectives.length >= 1 && (
-        <div className="sticky-cta animate-slide-up">
-          <div className="mx-auto flex max-w-3xl items-center justify-between px-5 py-3 md:px-8">
-            <p className="text-[10px] font-semibold uppercase tracking-widest text-slate-500">
+        <div className="sticky-cta animate-slide-up flex items-center justify-between px-6 py-2">
+          <div className="flex flex-col">
+            <p className="text-[8px] font-bold uppercase tracking-[0.2em] text-cyan-400">
+              Compare Engine
+            </p>
+            <p className="text-[10px] text-slate-400 font-semibold mt-0.5">
               {selectedPerspectives.length}/2 selected
             </p>
-
-            {selectedPerspectives.length === 2 ? (
-              <button
-                type="button"
-                onClick={handleCompare}
-                className="group flex items-center gap-2 rounded-full bg-gradient-to-r from-cyan-500 to-blue-600 px-6 py-2.5 text-[11px] font-semibold uppercase tracking-widest text-white shadow-lg shadow-cyan-500/20 transition-all hover:shadow-cyan-500/40 hover:scale-[1.02] active:scale-95"
-              >
-                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" className="group-hover:rotate-12 transition-transform">
-                  <rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/>
-                </svg>
-                Compare Now
-              </button>
-            ) : (
-              <p className="text-[10px] text-slate-600">
-                Select one more to compare
-              </p>
-            )}
           </div>
+
+          {selectedPerspectives.length === 2 ? (
+            <button
+              type="button"
+              onClick={handleCompare}
+              className="group flex items-center gap-1.5 rounded-full bg-gradient-to-r from-cyan-500 to-blue-600 px-4 py-1.5 text-[10px] font-bold uppercase tracking-widest text-white transition-all hover:scale-[1.02] active:scale-95 cursor-pointer"
+            >
+              Compare
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" className="group-hover:translate-x-0.5 transition-transform">
+                <polyline points="9 18 15 12 9 6"/>
+              </svg>
+            </button>
+          ) : (
+            <p className="text-[9px] text-slate-500 uppercase tracking-widest">
+              Select 1 more
+            </p>
+          )}
         </div>
       )}
     </div>

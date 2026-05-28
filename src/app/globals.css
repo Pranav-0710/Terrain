@@ -145,14 +145,35 @@ a {
   background-clip: text;
 }
 
-/* Sticky CTA bar */
+/* Floating capsule CTA bar (macos dock style) */
 .sticky-cta {
   position: fixed;
-  bottom: 0;
-  left: 0;
-  right: 0;
+  bottom: 1.5rem;
+  left: 50%;
+  transform: translateX(-50%);
   z-index: 50;
-  backdrop-filter: blur(20px);
-  background: rgba(0, 0, 0, 0.85);
-  border-top: 1px solid rgba(255, 255, 255, 0.06);
+  width: 90%;
+  max-width: 480px;
+  backdrop-filter: blur(20px) saturate(180%);
+  background: rgba(10, 10, 10, 0.8);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.5), 0 0 15px rgba(34, 211, 238, 0.1);
+  border-radius: 9999px;
+  padding: 0.25rem 0.5rem;
 }
+
+/* Tech dot grid mesh background */
+.bg-dot-grid {
+  background-image: radial-gradient(rgba(255, 255, 255, 0.04) 1px, transparent 1px);
+  background-size: 24px 24px;
+}
+
+.glow-card-hover {
+  transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+}
+.glow-card-hover:hover {
+  border-color: rgba(34, 211, 238, 0.25);
+  box-shadow: 0 0 20px rgba(34, 211, 238, 0.05);
+  background: rgba(255, 255, 255, 0.04);
+}
+

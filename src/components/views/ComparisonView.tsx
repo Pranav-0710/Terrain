@@ -59,20 +59,37 @@ export function ComparisonView({
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {/* Editorial Frame Diff */}
               <div className="glass-card p-4">
                 <div className="flex items-start gap-3">
                   <span className="shrink-0 mt-0.5 text-[10px] font-mono font-semibold text-slate-500 bg-white/[0.04] px-2 py-0.5 rounded">FRAME</span>
                   <p className="text-sm text-slate-300 leading-relaxed">
-                    Source A emphasizes <span className="text-cyan-400 font-medium">geopolitical impact</span> while Source B focuses on <span className="text-purple-400 font-medium">local civilian cost</span>.
+                    <strong>{perspectiveA.source.name}</strong> frames this issue around <span className="text-cyan-400 font-semibold">{perspectiveA.article.editorial_frame?.trim() || "unspecified frame"}</span>, whereas <strong>{perspectiveB.source.name}</strong> structures it as <span className="text-purple-400 font-semibold">{perspectiveB.article.editorial_frame?.trim() || "unspecified frame"}</span>.
                   </p>
                 </div>
               </div>
+
+              {/* Omissions Diff */}
               <div className="glass-card p-4">
                 <div className="flex items-start gap-3">
                   <span className="shrink-0 mt-0.5 text-[10px] font-mono font-semibold text-slate-500 bg-white/[0.04] px-2 py-0.5 rounded">OMISSION</span>
-                  <p className="text-sm text-slate-300 leading-relaxed">
-                    Source A omits <span className="italic text-slate-400">&quot;{perspectiveB.article.omitted_context?.split('.')[0]}&quot;</span> mentioned in Source B.
-                  </p>
+                  <div className="text-sm text-slate-300 leading-relaxed space-y-2">
+                    {perspectiveA.article.omitted_context ? (
+                      <p>
+                        <strong>{perspectiveA.source.name}</strong> omits context: <span className="italic text-slate-400">&quot;{perspectiveA.article.omitted_context.trim()}&quot;</span>.
+                      </p>
+                    ) : null}
+                    {perspectiveB.article.omitted_context ? (
+                      <p>
+                        <strong>{perspectiveB.source.name}</strong> omits context: <span className="italic text-slate-400">&quot;{perspectiveB.article.omitted_context.trim()}&quot;</span>.
+                      </p>
+                    ) : null}
+                    {!perspectiveA.article.omitted_context && !perspectiveB.article.omitted_context ? (
+                      <p className="text-slate-400">
+                        No critical context omissions were identified between these two reports.
+                      </p>
+                    ) : null}
+                  </div>
                 </div>
               </div>
             </div>

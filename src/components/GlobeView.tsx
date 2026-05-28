@@ -136,10 +136,27 @@ export function GlobeView({
         pointLabel={(point) => {
           const event = point as EventMarker & { story_count: number };
           return `
-            <div style="padding:10px 12px;border-radius:16px;background:rgba(2,6,23,0.88);border:1px solid rgba(148,163,184,0.18);color:white;backdrop-filter:blur(16px);min-width:180px;">
-              <div style="font-size:10px;letter-spacing:0.24em;text-transform:uppercase;color:#67e8f9;">Event</div>
-              <div style="margin-top:6px;font-size:14px;font-weight:700;line-height:1.3;">${event.title}</div>
-              <div style="margin-top:6px;font-size:11px;color:#cbd5e1;">${event.story_count} mapped sources</div>
+            <div style="
+              padding: 12px 16px;
+              border-radius: 12px;
+              background: rgba(10, 10, 10, 0.85);
+              border: 1px solid rgba(34, 211, 238, 0.35);
+              box-shadow: 0 10px 30px -10px rgba(0, 0, 0, 0.7), 0 0 15px rgba(34, 211, 238, 0.15);
+              color: white;
+              backdrop-filter: blur(12px);
+              min-width: 220px;
+              max-width: 300px;
+              font-family: 'Inter', system-ui, sans-serif;
+            ">
+              <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid rgba(255,255,255,0.08); padding-bottom: 6px; margin-bottom: 8px;">
+                <span style="font-size: 9px; font-weight: 700; letter-spacing: 0.15em; text-transform: uppercase; color: #22d3ee;">RECON REPORT</span>
+                <span style="font-size: 8px; font-family: monospace; color: rgba(255,255,255,0.4);">${event.lat.toFixed(2)}°N, ${event.lng.toFixed(2)}°E</span>
+              </div>
+              <div style="font-size: 13px; font-weight: 600; line-height: 1.4; color: #ffffff; margin-bottom: 8px;">${event.title}</div>
+              <div style="display: flex; align-items: center; gap: 6px; font-size: 10px; color: #cbd5e1;">
+                <span style="display: inline-block; width: 6px; height: 6px; border-radius: 50%; background: #22d3ee;"></span>
+                <span>${event.story_count} perspectives tracked</span>
+              </div>
             </div>
           `;
         }}
