@@ -212,7 +212,7 @@ export default function HomePage() {
         {view === "explore" && (
           <motion.div
             key="explore"
-            className="absolute inset-0 z-10"
+            className="absolute inset-0 z-10 pointer-events-none"
             initial={{ opacity: 0, scale: 1.05 }}
             animate={{ opacity: 1, scale: 1 }}
             exit={{ opacity: 0, scale: 0.95 }}
