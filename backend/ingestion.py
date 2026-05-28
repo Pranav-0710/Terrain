@@ -11,8 +11,7 @@ Primary path:
 from __future__ import annotations
 
 import email.utils
-import json
-import os
+import re
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from typing import Callable
@@ -20,37 +19,19 @@ from urllib.parse import urlparse
 from defusedxml import ElementTree as ET
 
 import requests
+from bs4 import BeautifulSoup
 
 from models import ExternalSyncRequest, ExternalSyncResponse, IngestArticleInput, IngestCoordinates, IngestResult
 
 GDELT_GKG_GEOJSON_URL = "https://api.gdeltproject.org/api/v1/gkg_geojson"
-
-DEFAULT_RSS_FEEDS = [
-    {
-        "name": "BBC News",
-        "url": "http://feeds.bbci.co.uk/news/world/rss.xml",
-        "country": "United Kingdom",
-        "lat": 51.5074,
-        "lng": -0.1278,
-        "funding_type": "Public/State-funded",
-    },
-    {
-        "name": "The Guardian",
-        "url": "https://www.theguardian.com/world/rss",
-        "country": "United Kingdom",
-        "lat": 51.5074,
-        "lng": -0.1278,
-        "funding_type": "Private/Reader-funded",
-    },
-    {
-        "name": "NPR",
-        "url": "https://feeds.npr.org/1004/rss.xml",
-        "country": "United States",
-        "lat": 38.9072,
-        "lng": -77.0369,
-        "funding_type": "Nonprofit/Public media",
-    },
-]
+RSS_FETCH_TIMEOUT = 20
+ARTICLE_FETCH_TIMEOUT = 12
+MIN_RSS_CONTENT_LENGTH = 240
+SCRAPE_MAX_CHARS = 8000
+SCRAPE_HEADERS = {
+    "User-Agent": "Mozilla/5.0 (compatible; TerrainBot/1.0; +https://github.com/Pranav-0710/Terrain)",
+    "Accept-Language": "en-US,en;q=0.8",
+}
 
 DOMAIN_OVERRIDES = {
     "bbc.co.uk": {
@@ -185,26 +166,18 @@ def parse_gdelt_timestamp(value: str | None) -> datetime | None:
 
 
 def load_rss_feeds(get_db_connection=None) -> list[RssFeedConfig]:
-    """Load RSS feeds from DB if connection factory provided, else fall back to env/hardcoded."""
-    if get_db_connection is not None:
-        try:
-            with get_db_connection() as conn:
-                with conn.cursor() as cur:
-                    cur.execute(
-                        "SELECT name, url, country, lat, lng, funding_type, political_lean, press_freedom_score FROM rss_sources WHERE is_active = TRUE ORDER BY name"
-                    )
-                    rows = cur.fetchall()
-                    if rows:
-                        return [RssFeedConfig(**dict(row)) for row in rows]
-        except Exception:
-            pass
+    """Load RSS feeds from DB only."""
+    if get_db_connection is None:
+        raise RuntimeError("Database connection required to load RSS feeds.")
 
-    raw = os.getenv("RSS_FEEDS_JSON")
-    if raw:
-        feeds = json.loads(raw)
-        return [RssFeedConfig(**item) for item in feeds]
+    with get_db_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                "SELECT name, url, country, lat, lng, funding_type, political_lean, press_freedom_score FROM rss_sources WHERE is_active = TRUE ORDER BY name"
+            )
+            rows = cur.fetchall()
 
-    return [RssFeedConfig(**item) for item in DEFAULT_RSS_FEEDS]
+    return [RssFeedConfig(**dict(row)) for row in rows]
 
 
 def infer_source_from_domain(domain: str) -> RssFeedConfig:
@@ -341,12 +314,48 @@ def parse_rss_feed(xml_text: str, source: RssFeedConfig) -> list[RssArticle]:
     return items
 
 
-def is_english_title(title: str) -> bool:
-    """Reject titles that are predominantly non-ASCII (e.g. Japanese, Chinese, Arabic)."""
-    if not title:
-        return False
-    ascii_chars = sum(1 for c in title if ord(c) < 128)
-    return ascii_chars / len(title) >= 0.7
+def normalize_whitespace(text: str) -> str:
+    return re.sub(r"\s+", " ", text).strip()
+
+
+def should_scrape_html(content: str) -> bool:
+    trimmed = (content or "").strip()
+    if not trimmed:
+        return True
+    if len(trimmed) < MIN_RSS_CONTENT_LENGTH:
+        return True
+    lowered = trimmed.lower()
+    if lowered.endswith("...") or lowered.endswith("…"):
+        return True
+    if "read more" in lowered or "continue reading" in lowered:
+        return True
+    return False
+
+
+def scrape_article_text(url: str) -> str:
+    if not url:
+        return ""
+
+    try:
+        response = requests.get(url, timeout=ARTICLE_FETCH_TIMEOUT, headers=SCRAPE_HEADERS)
+        response.raise_for_status()
+    except requests.RequestException:
+        return ""
+
+    try:
+        soup = BeautifulSoup(response.text, "html.parser")
+    except Exception:
+        return ""
+
+    for tag in soup(["script", "style", "noscript", "header", "footer", "nav", "aside", "form"]):
+        tag.decompose()
+
+    container = soup.find("article") or soup.find("main") or soup.body
+    if container is None:
+        return ""
+
+    text = normalize_whitespace(" ".join(container.stripped_strings))
+    return text[:SCRAPE_MAX_CHARS]
 
 
 def fetch_rss_articles(feeds: list[RssFeedConfig]) -> tuple[list[RssArticle], list[str]]:
@@ -355,19 +364,32 @@ def fetch_rss_articles(feeds: list[RssFeedConfig]) -> tuple[list[RssArticle], li
 
     for feed in feeds:
         try:
-            response = requests.get(feed.url, timeout=20, headers={"User-Agent": "TerrainBot/1.0"})
+            response = requests.get(feed.url, timeout=RSS_FETCH_TIMEOUT, headers=SCRAPE_HEADERS)
             response.raise_for_status()
-            articles.extend(parse_rss_feed(response.text, feed))
+        except requests.RequestException:
+            failed_feeds.append(feed.name)
+            continue
+
+        try:
+            feed_articles = parse_rss_feed(response.text, feed)
         except Exception:
             failed_feeds.append(feed.name)
+            continue
 
-    # Filter out non-English articles
-    articles = [a for a in articles if is_english_title(a.title)]
+        for article in feed_articles:
+            if should_scrape_html(article.content):
+                scraped_text = scrape_article_text(article.url)
+                if scraped_text and len(scraped_text) > len(article.content):
+                    article.content = scraped_text
+            articles.append(article)
 
     deduped: dict[str, RssArticle] = {}
     for article in articles:
         normalized = normalize_url(article.url)
-        if normalized and normalized not in deduped:
+        if not normalized:
+            continue
+        existing = deduped.get(normalized)
+        if existing is None or len(article.content) > len(existing.content):
             deduped[normalized] = article
 
     return list(deduped.values()), failed_feeds

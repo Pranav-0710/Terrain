@@ -14,7 +14,7 @@ const API_BASE_URL =
   process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8000";
 
 const panelBaseClass =
-  "absolute inset-y-4 right-4 z-20 w-[min(30rem,calc(100vw-2rem))] overflow-hidden rounded-2xl border border-white/[0.08] bg-[#000000]/80 shadow-2xl backdrop-blur-2xl transition-all duration-500 ease-out md:inset-y-6 md:right-6";
+  "absolute inset-0 z-20 w-full overflow-hidden bg-[#000000] md:inset-y-6 md:right-6 md:w-[min(30rem,calc(100vw-2rem))] md:rounded-2xl md:border md:border-white/[0.08] md:bg-[#000000]/80 md:shadow-2xl md:backdrop-blur-2xl transition-all duration-500 ease-out";
 
 export default function HomePage() {
   const [events, setEvents] = useState<EventMarker[]>([]);

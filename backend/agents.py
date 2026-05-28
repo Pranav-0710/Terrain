@@ -58,11 +58,12 @@ Return ONLY valid JSON with this exact schema:
 
 Rules:
 1. Input may be messy raw article text, excerpt, syndication copy, transcript fragments, or copied web text.
-2. Use article text first. If metadata appears in input, use it. If missing, infer minimally and conservatively.
-3. Keep `summary_ai` neutral, concrete, 1-2 sentences.
-4. Keep `editorial_frame` short, not sentence.
-5. `omitted_context` must name meaningful missing context, not repeat article.
-6. Use one funding type from allowed enum only.
+2. Input may be in ANY language. You MUST translate foreign language articles into clean English summaries and headlines.
+3. Use article text first. If metadata appears in input, use it. If missing, infer minimally and conservatively.
+4. Keep `summary_ai` neutral, concrete, 1-2 sentences.
+5. Keep `editorial_frame` short, not sentence.
+6. `omitted_context` must name meaningful missing context, not repeat article.
+7. Use one funding type from allowed enum only.
 8. No markdown. No commentary.
 9. ALL output MUST be in English, regardless of the input language."""
 
@@ -266,6 +267,39 @@ def fallback_article_analysis(
             "omitted_context": _fallback_omitted_context(text),
         },
     }
+
+
+CLUSTERING_SYSTEM_PROMPT = """You are Terrain Event Linker. Determine if a news article belongs to an existing event.
+Return ONLY valid JSON: {"match": true/false, "event_id": "<id or null>", "confidence": 0-1.0}
+Rules:
+1. Match ONLY if article is about the SAME specific event (e.g., the same earthquake, the same specific protest).
+2. Different events in the same category (e.g., two different fires) are NOT matches.
+3. If multiple events match, pick the most recent/specific one.
+4. Input will be article text and a list of recent events."""
+
+def evaluate_event_match(article_text: str, recent_events: list[dict]) -> dict[str, Any]:
+    if not recent_events or not endpoints:
+        return {"match": False, "event_id": None, "confidence": 0}
+    
+    payload = {
+        "article_text": clean_article_text(article_text)[:2000],
+        "recent_events": [
+            {"id": e["id"], "title": e["title"]} for e in recent_events
+        ]
+    }
+    
+    try:
+        raw_json = _call_llm_with_retries(
+            messages=[
+                {"role": "system", "content": CLUSTERING_SYSTEM_PROMPT},
+                {"role": "user", "content": json.dumps(payload)},
+            ],
+            temperature=0.1,
+            max_tokens=200,
+        )
+        return json.loads(raw_json)
+    except Exception:
+        return {"match": False, "event_id": None, "confidence": 0}
 
 
 def analyze_article(

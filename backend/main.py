@@ -17,7 +17,13 @@ from psycopg2.extras import RealDictCursor
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 
-from agents import analyze_article, build_alignment_data, generate_contradiction_report, calculate_distance_km
+from agents import (
+    analyze_article,
+    build_alignment_data,
+    calculate_distance_km,
+    evaluate_event_match,
+    generate_contradiction_report,
+)
 from ingestion import sync_external_news
 from models import (
     Article,
@@ -304,11 +310,19 @@ def upsert_event(cur, article: IngestArticleInput):
         SELECT id::text, title, lat, lng
         FROM events
         ORDER BY created_at DESC
-        LIMIT 200
+        LIMIT 50
         """
     )
     recent_events = cur.fetchall()
 
+    # Semantic Clustering via LLM
+    match_result = evaluate_event_match(article.content or event.title, recent_events)
+    if match_result["match"] and match_result["event_id"]:
+        for ev in recent_events:
+            if ev["id"] == match_result["event_id"]:
+                return ev, False
+
+    # Fallback: Keyword matching (only if LLM match failed)
     best_match = None
     best_score = 0.0
 
@@ -331,7 +345,7 @@ def upsert_event(cur, article: IngestArticleInput):
             # Jaccard-like: overlap relative to the smaller set
             score = overlap / min(len(article_kw), len(ev_kw))
 
-            if score >= 0.3 and score > best_score:
+            if score >= 0.4 and score > best_score:
                 best_score = score
                 best_match = ev
 
