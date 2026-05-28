@@ -1,5 +1,6 @@
 "use client";
 
+import { useCallback, useEffect, useRef, useState } from "react";
 import type { EventMarker } from "../../app/types";
 import { SourceDiversityRing } from "../SourceDiversityRing";
 
@@ -16,6 +17,50 @@ export function ExploreView({
   error,
   onSelectEvent,
 }: ExploreViewProps) {
+  const scrollRef = useRef<HTMLDivElement>(null);
+  const [canScrollLeft, setCanScrollLeft] = useState(false);
+  const [canScrollRight, setCanScrollRight] = useState(false);
+
+  const checkScroll = useCallback(() => {
+    const el = scrollRef.current;
+    if (!el) return;
+    setCanScrollLeft(el.scrollLeft > 10);
+    setCanScrollRight(el.scrollLeft < el.scrollWidth - el.clientWidth - 10);
+  }, []);
+
+  useEffect(() => {
+    checkScroll();
+    const el = scrollRef.current;
+    if (!el) return;
+    el.addEventListener("scroll", checkScroll, { passive: true });
+    window.addEventListener("resize", checkScroll);
+    return () => {
+      el.removeEventListener("scroll", checkScroll);
+      window.removeEventListener("resize", checkScroll);
+    };
+  }, [checkScroll, events]);
+
+  // Mouse wheel → horizontal scroll on desktop
+  useEffect(() => {
+    const el = scrollRef.current;
+    if (!el) return;
+    const handler = (e: WheelEvent) => {
+      if (Math.abs(e.deltaY) > Math.abs(e.deltaX)) {
+        e.preventDefault();
+        el.scrollLeft += e.deltaY;
+      }
+    };
+    el.addEventListener("wheel", handler, { passive: false });
+    return () => el.removeEventListener("wheel", handler);
+  }, [events]);
+
+  const scroll = (direction: "left" | "right") => {
+    const el = scrollRef.current;
+    if (!el) return;
+    const amount = direction === "left" ? -340 : 340;
+    el.scrollBy({ left: amount, behavior: "smooth" });
+  };
+
   return (
     <div className="absolute inset-0 z-10 flex flex-col pointer-events-none">
       {/* Floating Header */}
@@ -93,51 +138,98 @@ export function ExploreView({
                 <p className="text-[10px] font-semibold uppercase tracking-[0.2em] text-slate-500">
                   Active Events
                 </p>
-                <p className="text-[10px] text-slate-600">
-                  scroll →
+                
+                {/* Desktop scroll arrows */}
+                <div className="hidden md:flex items-center gap-1">
+                  <button
+                    type="button"
+                    onClick={() => scroll("left")}
+                    disabled={!canScrollLeft}
+                    className={`flex h-7 w-7 items-center justify-center rounded-lg border border-white/[0.06] transition-all active:scale-90 ${
+                      canScrollLeft
+                        ? "bg-white/[0.04] text-slate-300 hover:bg-white/[0.08] hover:text-white"
+                        : "bg-transparent text-slate-700 cursor-default"
+                    }`}
+                    aria-label="Scroll left"
+                  >
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
+                      <polyline points="15 18 9 12 15 6"/>
+                    </svg>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => scroll("right")}
+                    disabled={!canScrollRight}
+                    className={`flex h-7 w-7 items-center justify-center rounded-lg border border-white/[0.06] transition-all active:scale-90 ${
+                      canScrollRight
+                        ? "bg-white/[0.04] text-slate-300 hover:bg-white/[0.08] hover:text-white"
+                        : "bg-transparent text-slate-700 cursor-default"
+                    }`}
+                    aria-label="Scroll right"
+                  >
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
+                      <polyline points="9 18 15 12 9 6"/>
+                    </svg>
+                  </button>
+                </div>
+
+                {/* Mobile hint */}
+                <p className="text-[10px] text-slate-600 md:hidden">
+                  swipe →
                 </p>
               </div>
               
-              <div className="flex gap-3 overflow-x-auto pb-2 -mx-1 px-1 snap-x snap-mandatory scrollbar-none" style={{ scrollbarWidth: 'none' }}>
-                {events.map((event, index) => (
-                  <button
-                    key={event.id}
-                    type="button"
-                    onClick={() => onSelectEvent(event)}
-                    style={{ animationDelay: `${index * 60}ms` }}
-                    className="group relative flex-shrink-0 w-[280px] md:w-[320px] snap-start rounded-xl border border-white/[0.06] bg-white/[0.03] p-4 text-left backdrop-blur-lg transition-all duration-300 hover:border-white/[0.12] hover:bg-white/[0.06] hover:-translate-y-1 hover:shadow-[0_12px_40px_rgba(0,0,0,0.4)] animate-pill-in opacity-0 active:scale-[0.98]"
-                  >
-                    {/* Glow accent */}
-                    <div className="absolute inset-0 rounded-xl bg-gradient-to-br from-cyan-500/[0.04] to-purple-500/[0.04] opacity-0 group-hover:opacity-100 transition-opacity" />
-                    
-                    <div className="relative flex items-start justify-between gap-3">
-                      <div className="min-w-0 flex-1">
-                        <p className="text-[13px] font-medium text-white leading-snug line-clamp-2 group-hover:text-cyan-50 transition-colors">
-                          {event.title}
-                        </p>
-                        <div className="mt-2 flex items-center gap-3">
-                          <span className="text-[10px] text-slate-500">
-                            {new Date(event.created_at).toLocaleDateString(undefined, {
-                              month: "short",
-                              day: "numeric",
-                            })}
-                          </span>
-                          <span className="h-0.5 w-0.5 rounded-full bg-slate-600" />
-                          <span className="text-[10px] font-medium text-slate-400">
-                            {event.story_count} sources
-                          </span>
+              <div className="relative">
+                {/* Left fade gradient */}
+                {canScrollLeft && (
+                  <div className="hidden md:block absolute left-0 top-0 bottom-2 w-12 bg-gradient-to-r from-black to-transparent z-10 pointer-events-none" />
+                )}
+                {/* Right fade gradient */}
+                {canScrollRight && (
+                  <div className="hidden md:block absolute right-0 top-0 bottom-2 w-12 bg-gradient-to-l from-black to-transparent z-10 pointer-events-none" />
+                )}
+
+                <div ref={scrollRef} className="flex gap-3 overflow-x-auto pb-2 -mx-1 px-1 snap-x snap-mandatory" style={{ scrollbarWidth: 'none', msOverflowStyle: 'none', WebkitOverflowScrolling: 'touch' }}>
+                  {events.map((event, index) => (
+                    <button
+                      key={event.id}
+                      type="button"
+                      onClick={() => onSelectEvent(event)}
+                      style={{ animationDelay: `${index * 60}ms` }}
+                      className="group relative flex-shrink-0 w-[280px] md:w-[320px] snap-start rounded-xl border border-white/[0.06] bg-white/[0.03] p-4 text-left backdrop-blur-lg transition-all duration-300 hover:border-white/[0.12] hover:bg-white/[0.06] hover:-translate-y-1 hover:shadow-[0_12px_40px_rgba(0,0,0,0.4)] animate-pill-in opacity-0 active:scale-[0.98]"
+                    >
+                      {/* Glow accent */}
+                      <div className="absolute inset-0 rounded-xl bg-gradient-to-br from-cyan-500/[0.04] to-purple-500/[0.04] opacity-0 group-hover:opacity-100 transition-opacity" />
+                      
+                      <div className="relative flex items-start justify-between gap-3">
+                        <div className="min-w-0 flex-1">
+                          <p className="text-[13px] font-medium text-white leading-snug line-clamp-2 group-hover:text-cyan-50 transition-colors">
+                            {event.title}
+                          </p>
+                          <div className="mt-2 flex items-center gap-3">
+                            <span className="text-[10px] text-slate-500">
+                              {new Date(event.created_at).toLocaleDateString(undefined, {
+                                month: "short",
+                                day: "numeric",
+                              })}
+                            </span>
+                            <span className="h-0.5 w-0.5 rounded-full bg-slate-600" />
+                            <span className="text-[10px] font-medium text-slate-400">
+                              {event.story_count} sources
+                            </span>
+                          </div>
+                        </div>
+                        
+                        <div className="flex flex-col items-center gap-2 shrink-0">
+                          <SourceDiversityRing slices={event.source_diversity ?? []} />
+                          <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" className="text-slate-600 group-hover:text-cyan-400 transition-colors group-hover:translate-x-0.5 transition-transform">
+                            <polyline points="9 18 15 12 9 6"/>
+                          </svg>
                         </div>
                       </div>
-                      
-                      <div className="flex flex-col items-center gap-2 shrink-0">
-                        <SourceDiversityRing slices={event.source_diversity ?? []} />
-                        <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" className="text-slate-600 group-hover:text-cyan-400 transition-colors group-hover:translate-x-0.5 transition-transform">
-                          <polyline points="9 18 15 12 9 6"/>
-                        </svg>
-                      </div>
-                    </div>
-                  </button>
-                ))}
+                    </button>
+                  ))}
+                </div>
               </div>
             </>
           )}
