@@ -1,17 +1,20 @@
 "use client";
 
-import { useEffect, useState } from "react";
-
+import { useEffect, useMemo, useState } from "react";
+import { motion, AnimatePresence } from "framer-motion";
 import { GlobeView } from "../components/GlobeView";
+
 import { ExploreView } from "../components/views/ExploreView";
 import { AnalysisView } from "../components/views/AnalysisView";
 import { ComparisonView } from "../components/views/ComparisonView";
+import { SidebarNavigation } from "../components/SidebarNavigation";
+import { AuroraBackground, type AuroraTheme } from "../components/AuroraBackground";
 import type { EventMarker, EventPerspectiveResponse, Perspective } from "./types";
 
 const API_BASE_URL =
   process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8000";
 
-type ViewState = "explore" | "analysis" | "comparison";
+export type ViewState = "explore" | "analysis" | "comparison" | "sentiment";
 
 export default function HomePage() {
   const [view, setView] = useState<ViewState>("explore");
@@ -26,6 +29,19 @@ export default function HomePage() {
   const [isLoadingEvents, setIsLoadingEvents] = useState(true);
   const [isLoadingDetails, setIsLoadingDetails] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  // ── Theme Detection ──
+  const auroraTheme = useMemo<AuroraTheme>(() => {
+    if (!selectedEvent) return "neutral";
+    const title = (eventDetails?.event_title ?? selectedEvent.title).toLowerCase();
+    
+    if (title.match(/war|conflict|attack|strike|military|protest|riot|kill|death/)) return "conflict";
+    if (title.match(/tech|ai|semiconductor|crypto|launch|startup|space|digital/)) return "tech";
+    if (title.match(/climate|earthquake|storm|flood|carbon|emission|nature|ocean/)) return "climate";
+    if (title.match(/social|rights|law|bill|policy|election|vote|human/)) return "social";
+    
+    return "neutral";
+  }, [selectedEvent, eventDetails]);
 
   // ── Load events on mount ──
   useEffect(() => {
@@ -129,14 +145,37 @@ export default function HomePage() {
     setComparisonPair(null);
   };
 
+  const handleNavigate = (newView: ViewState) => {
+    if (newView === "explore") {
+      handleBackToExplore();
+    } else if (newView === "analysis" && selectedEvent) {
+      setView("analysis");
+    } else if (newView === "comparison" && comparisonPair) {
+      setView("comparison");
+    } else if (newView === "sentiment" && selectedEvent) {
+      setView("sentiment");
+    }
+  };
+
   return (
-    <main className="relative min-h-screen w-full overflow-hidden bg-[#000000] bg-dot-grid text-slate-100">
-      {/* 3D Globe — always rendered, hidden via CSS when not on explore */}
-      <div
-        className="transition-opacity duration-700"
-        style={{
-          opacity: view === "explore" ? 1 : 0,
-          visibility: view === "explore" ? "visible" : "hidden",
+    <main className="relative min-h-screen w-full overflow-hidden bg-[#000000] text-slate-100">
+      
+      {/* Living Ambient Atmosphere */}
+      <AuroraBackground theme={auroraTheme} />
+
+      {/* 3D Globe — Spatial cinematic background */}
+      <motion.div
+        className="absolute inset-0 z-0"
+        initial={false}
+        animate={{
+          scale: view === "explore" ? 1 : 0.85,
+          filter: view === "explore" ? "blur(0px)" : "blur(12px)",
+          opacity: view === "explore" ? 1 : 0.4,
+          y: view === "explore" ? 0 : -40,
+        }}
+        transition={{
+          duration: 1.2,
+          ease: [0.16, 1, 0.3, 1], // expo easeOut
         }}
       >
         <GlobeView
@@ -145,59 +184,105 @@ export default function HomePage() {
           onSelectEvent={handleSelectEvent}
           perspectives={eventDetails?.perspectives ?? []}
         />
-      </div>
+      </motion.div>
+
+      <SidebarNavigation
+        currentView={view}
+        onNavigate={handleNavigate}
+        isEventSelected={!!selectedEvent}
+        hasComparison={!!comparisonPair}
+      />
 
       {/* Subtle Vignette (explore only) */}
-      {view === "explore" && (
-        <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_at_center,transparent_30%,#000000_100%)]" />
-      )}
+      <AnimatePresence>
+        {view === "explore" && (
+          <motion.div 
+            className="pointer-events-none absolute inset-0 z-1 bg-[radial-gradient(ellipse_at_center,transparent_30%,#000000_100%)]" 
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+          />
+        )}
+      </AnimatePresence>
 
-      {/* ── View Layer ── */}
-      
-      {/* Explore View */}
-      {view === "explore" && (
-        <ExploreView
-          events={events}
-          isLoading={isLoadingEvents}
-          error={error}
-          onSelectEvent={handleSelectEvent}
-        />
-      )}
+      {/* ── View Layer with AnimatePresence ── */}
+      <AnimatePresence mode="wait">
+        
+        {/* Explore View */}
+        {view === "explore" && (
+          <motion.div
+            key="explore"
+            className="absolute inset-0 z-10"
+            initial={{ opacity: 0, scale: 1.05 }}
+            animate={{ opacity: 1, scale: 1 }}
+            exit={{ opacity: 0, scale: 0.95 }}
+            transition={{ duration: 0.6, ease: "circOut" }}
+          >
+            <ExploreView
+              events={events}
+              isLoading={isLoadingEvents}
+              error={error}
+              onSelectEvent={handleSelectEvent}
+            />
+          </motion.div>
+        )}
 
-      {/* Analysis View */}
-      {view === "analysis" && eventDetails && (
-        <AnalysisView
-          eventDetails={eventDetails}
-          isLoading={isLoadingDetails}
-          onBack={handleBackToExplore}
-          onCompare={handleCompare}
-        />
-      )}
+        {/* Analysis View */}
+        {view === "analysis" && (
+          <motion.div
+            key="analysis"
+            className="absolute inset-0 z-20"
+            initial={{ y: "100%", opacity: 0 }}
+            animate={{ y: 0, opacity: 1 }}
+            exit={{ y: "100%", opacity: 0 }}
+            transition={{ type: "spring", damping: 25, stiffness: 120 }}
+          >
+            {eventDetails ? (
+              <AnalysisView
+                eventDetails={eventDetails}
+                isLoading={isLoadingDetails}
+                onBack={handleBackToExplore}
+                onCompare={handleCompare}
+              />
+            ) : (
+              <div className="flex h-full flex-col items-center justify-center">
+                <div className="flex flex-col items-center gap-5">
+                  <motion.div 
+                    className="relative"
+                    animate={{ rotate: 360 }}
+                    transition={{ repeat: Infinity, duration: 2, ease: "linear" }}
+                  >
+                    <div className="h-10 w-10 rounded-full border-2 border-cyan-400/20 border-t-cyan-400" />
+                  </motion.div>
+                  <div className="text-center">
+                    <p className="text-sm font-medium text-white tracking-widest uppercase">Aggregating Perspectives</p>
+                    <p className="mt-1 text-xs text-slate-500 font-mono">Mapping source networks...</p>
+                  </div>
+                </div>
+              </div>
+            )}
+          </motion.div>
+        )}
 
-      {/* Analysis Loading State */}
-      {view === "analysis" && !eventDetails && (
-        <div className="absolute inset-0 z-30 flex flex-col items-center justify-center bg-[#000000] view-slide-enter">
-          <div className="flex flex-col items-center gap-5">
-            <div className="relative">
-              <div className="h-10 w-10 rounded-full border-2 border-cyan-400/20 border-t-cyan-400 animate-spin" />
-              <div className="absolute inset-0 h-10 w-10 rounded-full border-2 border-purple-400/10 border-b-purple-400/40 animate-spin" style={{ animationDirection: "reverse", animationDuration: "1.5s" }} />
-            </div>
-            <div className="text-center">
-              <p className="text-sm font-medium text-white">Aggregating Perspectives</p>
-              <p className="mt-1 text-xs text-slate-500">Mapping source networks...</p>
-            </div>
-          </div>
-        </div>
-      )}
+        {/* Comparison View */}
+        {view === "comparison" && comparisonPair && (
+          <motion.div
+            key="comparison"
+            className="absolute inset-0 z-30"
+            initial={{ x: "100%" }}
+            animate={{ x: 0 }}
+            exit={{ x: "100%" }}
+            transition={{ type: "spring", damping: 30, stiffness: 150 }}
+          >
+            <ComparisonView
+              perspectiveA={comparisonPair.a}
+              perspectiveB={comparisonPair.b}
+              onBack={handleBackToAnalysis}
+            />
+          </motion.div>
+        )}
 
-      {/* Comparison View */}
-      {view === "comparison" && comparisonPair && (
-        <ComparisonView
-          perspectiveA={comparisonPair.a}
-          perspectiveB={comparisonPair.b}
-          onBack={handleBackToAnalysis}
-        />
-      )}
+      </AnimatePresence>
     </main>
   );
 }
