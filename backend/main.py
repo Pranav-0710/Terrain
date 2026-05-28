@@ -505,65 +505,8 @@ def ingest_article(article: IngestArticleInput) -> IngestResult:
     )
 
 
-async def auto_sync_loop():
-    interval_seconds = get_auto_sync_interval_seconds()
-    logger.info("Auto-sync loop started with interval=%ss", interval_seconds)
-
-    while True:
-        try:
-            result = await asyncio.get_running_loop().run_in_executor(
-                _executor,
-                partial(
-                    sync_external_news,
-                    build_auto_sync_request(),
-                    ingest_article,
-                    get_db_connection=get_connection,
-                ),
-            )
-            logger.info(
-                "Auto-sync complete attempted=%s inserted=%s updated=%s gdelt_matches=%s failed_feeds=%s",
-                result.attempted,
-                result.inserted,
-                result.updated,
-                result.gdelt_matches,
-                ",".join(result.failed_feeds) if result.failed_feeds else "none",
-            )
-        except asyncio.CancelledError:
-            raise
-        except Exception:
-            logger.exception("Auto-sync failed")
-
-        await asyncio.sleep(interval_seconds)
-
-
-@app.on_event("startup")
-async def start_background_sync():
-    global _sync_task
-
-    if not get_auto_sync_enabled():
-        logger.info("Auto-sync disabled")
-        return
-
-    if _sync_task and not _sync_task.done():
-        return
-
-    _sync_task = asyncio.create_task(auto_sync_loop())
-
-
-@app.on_event("shutdown")
-async def stop_background_sync():
-    global _sync_task
-
-    if not _sync_task:
-        return
-
-    _sync_task.cancel()
-    try:
-        await _sync_task
-    except asyncio.CancelledError:
-        pass
-    finally:
-        _sync_task = None
+# Note: The background sync scheduler has been refactored into the standalone
+# scheduler daemon script (`scheduler.py`) to run independently.
 
 
 @app.get("/api/events", response_model=list[EventMarker])
