@@ -426,20 +426,6 @@ Terrain/
 └─ TERRAIN_PRD.md
 ```
 
-## Current Limitations
-
-This repository is functional, but not finished as a production news platform.
-
-Current limitations include:
-
-- event clustering is still heuristic and title-based
-- article ingestion currently depends on RSS text quality and GDELT URL coverage
-- only English RSS titles are kept in the current sync filter
-- `RSS_FEEDS_JSON` and hardcoded feed fallbacks still exist as backups
-- the backend scheduler is process-local
-- no formal automated test suite is set up yet
-- some helper scripts are operational utilities, not polished developer tooling
-
 ## Roadmap Direction
 
 Natural next steps for Terrain:
