@@ -1,7 +1,7 @@
 import React from "react";
 import { Compass, BarChart2, GitMerge, MessageSquare, Menu } from "lucide-react";
 
-export type ViewState = "explore" | "analysis" | "comparison" | "sentiment";
+export type ViewState = "explore" | "hero" | "analysis" | "comparison" | "sentiment";
 
 interface SidebarNavigationProps {
   currentView: ViewState;

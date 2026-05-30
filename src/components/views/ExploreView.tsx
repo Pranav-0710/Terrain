@@ -132,6 +132,59 @@ export function ExploreView({
       {/* Spacer */}
       <div className="flex-1" />
 
+      {/* Feature Showcase — teach users what's available */}
+      {!isLoading && events.length > 0 && (
+        <div className="pointer-events-auto flex justify-center pb-5 px-4 md:px-8">
+          <div className="flex flex-col sm:flex-row items-stretch gap-3 max-w-3xl w-full">
+            {[
+              {
+                icon: (
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="text-cyan-400">
+                    <path d="M5 21v-6" /><path d="M12 21V3" /><path d="M19 21V9" />
+                  </svg>
+                ),
+                title: "Analyze",
+                desc: "Multi-source perspective breakdown",
+                textColor: "text-cyan-400",
+              },
+              {
+                icon: (
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="text-purple-400">
+                    <path d="M22 12h-4l-3 9L9 3l-3 9H2" />
+                  </svg>
+                ),
+                title: "Sentiment",
+                desc: "Editorial tone & bias radar",
+                textColor: "text-purple-400",
+              },
+              {
+                icon: (
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="text-emerald-400">
+                    <circle cx="18" cy="18" r="3" /><circle cx="6" cy="6" r="3" /><path d="M6 21V9a9 9 0 0 0 9 9" />
+                  </svg>
+                ),
+                title: "Compare",
+                desc: "Side-by-side source comparison",
+                textColor: "text-emerald-400",
+              },
+            ].map((feature) => (
+              <div
+                key={feature.title}
+                className="flex-1 flex items-center gap-3 rounded-xl border border-white/[0.06] bg-white/[0.03] backdrop-blur-md px-4 py-3"
+              >
+                <div className="shrink-0">{feature.icon}</div>
+                <div className="min-w-0">
+                  <p className={`text-[10px] font-bold uppercase tracking-widest ${feature.textColor}`}>
+                    {feature.title}
+                  </p>
+                  <p className="text-[9px] text-slate-500 truncate">{feature.desc}</p>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
       {/* First-time hint */}
       {!isLoading && events.length > 0 && (
         <div className="pointer-events-none flex justify-center pb-4 animate-float">
@@ -140,7 +193,7 @@ export function ExploreView({
               <path d="M15 15l-2 5L9 9l11 4-5 2zm0 0l5 5"/>
             </svg>
             <span className="text-[10px] font-medium text-slate-400 tracking-wide">
-              Tap a hotspot or select an event below
+              Select an event below to unlock these features
             </span>
           </div>
         </div>

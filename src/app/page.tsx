@@ -8,6 +8,7 @@ import { ExploreView } from "../components/views/ExploreView";
 import { AnalysisView } from "../components/views/AnalysisView";
 import { ComparisonView } from "../components/views/ComparisonView";
 import { SentimentView } from "../components/views/SentimentView";
+import { EventHeroView } from "../components/views/EventHeroView";
 import { SidebarNavigation } from "../components/SidebarNavigation";
 import { AuroraBackground, type AuroraTheme } from "../components/AuroraBackground";
 import type { EventMarker, EventPerspectiveResponse, Perspective } from "./types";
@@ -15,7 +16,7 @@ import type { EventMarker, EventPerspectiveResponse, Perspective } from "./types
 const API_BASE_URL =
   process.env.NEXT_PUBLIC_API_BASE_URL ?? (process.env.NODE_ENV === "development" ? "http://localhost:8000" : "");
 
-export type ViewState = "explore" | "analysis" | "comparison" | "sentiment";
+export type ViewState = "explore" | "hero" | "analysis" | "comparison" | "sentiment";
 
 export default function HomePage() {
   const [view, setView] = useState<ViewState>("explore");
@@ -126,7 +127,7 @@ export default function HomePage() {
   // ── Navigation handlers ──
   const handleSelectEvent = (event: EventMarker) => {
     setSelectedEvent(event);
-    setView("analysis");
+    setView("hero");
   };
 
   const handleBackToExplore = () => {
@@ -149,6 +150,8 @@ export default function HomePage() {
   const handleNavigate = (newView: ViewState) => {
     if (newView === "explore") {
       handleBackToExplore();
+    } else if (newView === "hero" && selectedEvent) {
+      setView("hero");
     } else if (newView === "analysis" && selectedEvent) {
       setView("analysis");
     } else if (newView === "comparison" && comparisonPair) {
@@ -156,6 +159,15 @@ export default function HomePage() {
     } else if (newView === "sentiment" && selectedEvent) {
       setView("sentiment");
     }
+  };
+
+  const handleHeroNavigate = (target: "analysis" | "sentiment") => {
+    setView(target);
+  };
+
+  const handleBackToHero = () => {
+    setView("hero");
+    setComparisonPair(null);
   };
 
   return (
@@ -169,10 +181,10 @@ export default function HomePage() {
         className="absolute inset-0 z-0"
         initial={false}
         animate={{
-          scale: view === "explore" ? 1 : 0.85,
-          filter: view === "explore" ? "blur(0px)" : "blur(12px)",
-          opacity: view === "explore" ? 1 : 0.4,
-          y: view === "explore" ? 0 : -40,
+          scale: (view === "explore" || view === "hero") ? 1 : 0.85,
+          filter: view === "explore" ? "blur(0px)" : view === "hero" ? "blur(6px)" : "blur(12px)",
+          opacity: view === "explore" ? 1 : view === "hero" ? 0.3 : 0.4,
+          y: (view === "explore" || view === "hero") ? 0 : -40,
         }}
         transition={{
           duration: 1.2,
@@ -228,6 +240,26 @@ export default function HomePage() {
           </motion.div>
         )}
 
+        {/* Event Hero Landing */}
+        {view === "hero" && selectedEvent && (
+          <motion.div
+            key="hero"
+            className="absolute inset-0 z-15"
+            initial={{ opacity: 0, y: 40 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -20 }}
+            transition={{ duration: 0.5, ease: "circOut" }}
+          >
+            <EventHeroView
+              event={selectedEvent}
+              eventDetails={eventDetails}
+              isLoading={isLoadingDetails}
+              onBack={handleBackToExplore}
+              onNavigate={handleHeroNavigate}
+            />
+          </motion.div>
+        )}
+
         {/* Analysis View */}
         {view === "analysis" && (
           <motion.div
@@ -242,7 +274,7 @@ export default function HomePage() {
               <AnalysisView
                 eventDetails={eventDetails}
                 isLoading={isLoadingDetails}
-                onBack={handleBackToExplore}
+                onBack={handleBackToHero}
                 onCompare={handleCompare}
               />
             ) : (
@@ -295,7 +327,7 @@ export default function HomePage() {
           >
             <SentimentView
               eventDetails={eventDetails}
-              onBack={() => setView("analysis")}
+              onBack={handleBackToHero}
             />
           </motion.div>
         )}
