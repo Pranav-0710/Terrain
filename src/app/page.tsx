@@ -7,6 +7,7 @@ import { GlobeView } from "../components/GlobeView";
 import { ExploreView } from "../components/views/ExploreView";
 import { AnalysisView } from "../components/views/AnalysisView";
 import { ComparisonView } from "../components/views/ComparisonView";
+import { SentimentView } from "../components/views/SentimentView";
 import { SidebarNavigation } from "../components/SidebarNavigation";
 import { AuroraBackground, type AuroraTheme } from "../components/AuroraBackground";
 import type { EventMarker, EventPerspectiveResponse, Perspective } from "./types";
@@ -278,6 +279,23 @@ export default function HomePage() {
               perspectiveA={comparisonPair.a}
               perspectiveB={comparisonPair.b}
               onBack={handleBackToAnalysis}
+            />
+          </motion.div>
+        )}
+
+        {/* Sentiment View */}
+        {view === "sentiment" && eventDetails && (
+          <motion.div
+            key="sentiment"
+            className="absolute inset-0 z-30"
+            initial={{ y: "100%", opacity: 0 }}
+            animate={{ y: 0, opacity: 1 }}
+            exit={{ y: "100%", opacity: 0 }}
+            transition={{ type: "spring", damping: 25, stiffness: 120 }}
+          >
+            <SentimentView
+              eventDetails={eventDetails}
+              onBack={() => setView("analysis")}
             />
           </motion.div>
         )}
