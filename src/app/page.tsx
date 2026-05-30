@@ -9,7 +9,6 @@ import { AnalysisView } from "../components/views/AnalysisView";
 import { ComparisonView } from "../components/views/ComparisonView";
 import { SentimentView } from "../components/views/SentimentView";
 import { EventHeroView } from "../components/views/EventHeroView";
-import { SidebarNavigation } from "../components/SidebarNavigation";
 import { AuroraBackground, type AuroraTheme } from "../components/AuroraBackground";
 import type { EventMarker, EventPerspectiveResponse, Perspective } from "./types";
 
@@ -199,12 +198,7 @@ export default function HomePage() {
         />
       </motion.div>
 
-      <SidebarNavigation
-        currentView={view}
-        onNavigate={handleNavigate}
-        isEventSelected={!!selectedEvent}
-        hasComparison={!!comparisonPair}
-      />
+
 
       {/* Subtle Vignette (explore only) */}
       <AnimatePresence>
