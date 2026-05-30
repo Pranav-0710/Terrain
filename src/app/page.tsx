@@ -181,8 +181,7 @@ export default function HomePage() {
         initial={false}
         animate={{
           scale: (view === "explore" || view === "hero") ? 1 : 0.85,
-          filter: view === "explore" ? "blur(0px)" : view === "hero" ? "blur(6px)" : "blur(12px)",
-          opacity: view === "explore" ? 1 : view === "hero" ? 0.3 : 0.4,
+          opacity: view === "explore" ? 1 : view === "hero" ? 0.3 : 0.2,
           y: (view === "explore" || view === "hero") ? 0 : -40,
         }}
         transition={{

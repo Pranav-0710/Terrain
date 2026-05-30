@@ -139,11 +139,10 @@ export function GlobeView({
             <div style="
               padding: 12px 16px;
               border-radius: 12px;
-              background: rgba(10, 10, 10, 0.85);
+              background: rgba(10, 10, 10, 0.95);
               border: 1px solid rgba(34, 211, 238, 0.35);
               box-shadow: 0 10px 30px -10px rgba(0, 0, 0, 0.7), 0 0 15px rgba(34, 211, 238, 0.15);
               color: white;
-              backdrop-filter: blur(12px);
               min-width: 220px;
               max-width: 300px;
               font-family: 'Inter', system-ui, sans-serif;
