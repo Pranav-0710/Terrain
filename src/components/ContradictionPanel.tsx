@@ -23,40 +23,71 @@ export function ContradictionPanel({
 
   useEffect(() => {
     const abortController = new AbortController();
+    let cancelled = false;
 
-    const loadReport = async () => {
+    const fetchWithTimeout = async (url: string, timeoutMs: number) => {
+      const timeoutId = setTimeout(() => abortController.abort(), timeoutMs);
       try {
-        setIsLoading(true);
-        setError(null);
-
-        const response = await fetch(
-          `${apiBaseUrl}/api/events/${eventId}/contradiction-report`,
-          {
-            signal: abortController.signal,
-            cache: "no-store",
-          }
-        );
-
-        if (!response.ok) {
-          throw new Error(`Failed to load report (${response.status})`);
-        }
-
-        const data = (await response.json()) as ContradictionReport;
-        setReport(data);
+        const res = await fetch(url, {
+          signal: abortController.signal,
+          cache: "no-store",
+        });
+        clearTimeout(timeoutId);
+        return res;
       } catch (err) {
-        if ((err as Error).name !== "AbortError") {
-          setError((err as Error).message);
-        }
-      } finally {
-        if (!abortController.signal.aborted) {
-          setIsLoading(false);
-        }
+        clearTimeout(timeoutId);
+        throw err;
       }
     };
 
-    loadReport();
+    const loadReport = async () => {
+      const maxRetries = 2;
+      let lastError: Error | null = null;
 
-    return () => abortController.abort();
+      for (let attempt = 0; attempt <= maxRetries; attempt++) {
+        if (cancelled) return;
+        try {
+          setIsLoading(true);
+          setError(null);
+
+          const response = await fetchWithTimeout(
+            `${apiBaseUrl}/api/events/${eventId}/contradiction-report`,
+            55000
+          );
+
+          if (!response.ok) {
+            throw new Error(`Failed to load report (${response.status})`);
+          }
+
+          const data = (await response.json()) as ContradictionReport;
+          if (!cancelled) setReport(data);
+          return;
+        } catch (err) {
+          lastError = err as Error;
+          if (lastError.name === "AbortError") {
+            if (attempt < maxRetries && !cancelled) {
+              continue; // retry on timeout
+            }
+            if (!cancelled) setError("Analysis timed out. The AI engine is processing — try refreshing in a moment.");
+            return;
+          }
+        }
+      }
+
+      if (!cancelled && lastError) {
+        setError(lastError.message || "Failed to load contradiction report.");
+      }
+      if (!cancelled) setIsLoading(false);
+    };
+
+    loadReport().finally(() => {
+      if (!cancelled) setIsLoading(false);
+    });
+
+    return () => {
+      cancelled = true;
+      abortController.abort();
+    };
   }, [eventId, apiBaseUrl]);
 
   if (isLoading) {
