@@ -14,13 +14,7 @@ const GLOBE_TEXTURE =
 const GLOBE_BUMP_TEXTURE =
   "https://unpkg.com/three-globe/example/img/earth-topology.png";
 
-const pointPalette = [
-  "#22d3ee",
-  "#60a5fa",
-  "#f472b6",
-  "#f59e0b",
-  "#a78bfa",
-] as const;
+import { getEventTopic, TOPIC_CONFIG } from "../app/page";
 
 interface GlobeViewProps {
   events: EventMarker[];
@@ -39,13 +33,18 @@ export function GlobeView({
 
   const ringsData = useMemo(
     () =>
-      events.map((event, index) => ({
-        ...event,
-        maxRadius: (event as any).story_count ? Math.min(Math.max((event as any).story_count * 0.8, 1.5), 8) : 2,
-        propagationSpeed: 1.5,
-        repeatPeriod: 2000,
-        color: event.id === selectedEventId ? '#ffffff' : pointPalette[index % pointPalette.length],
-      })),
+      events.map((event) => {
+        const topic = getEventTopic(event.title);
+        const config = TOPIC_CONFIG[topic];
+        
+        return {
+          ...event,
+          maxRadius: (event as any).story_count ? Math.min(Math.max((event as any).story_count * 0.8, 1.5), 8) : 2,
+          propagationSpeed: 1.5,
+          repeatPeriod: 2000,
+          color: event.id === selectedEventId ? '#ffffff' : config.color,
+        };
+      }),
     [events, selectedEventId],
   );
 

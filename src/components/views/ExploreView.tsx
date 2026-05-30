@@ -1,18 +1,45 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState, useMemo } from "react";
+import { motion, AnimatePresence } from "framer-motion";
 import type { EventMarker } from "../../app/types";
 import { SourceDiversityRing } from "../SourceDiversityRing";
+import { 
+  type TopicCategory, 
+  type RegionCategory, 
+  TOPIC_CONFIG, 
+  getEventTopic, 
+  getEventRegion 
+} from "../../app/page";
 
 interface ExploreViewProps {
   events: EventMarker[];
+  allEvents: EventMarker[];
+  activeTopic: TopicCategory | null;
+  activeRegion: RegionCategory | null;
+  onTopicChange: (topic: TopicCategory | null) => void;
+  onRegionChange: (region: RegionCategory | null) => void;
   isLoading: boolean;
   error: string | null;
   onSelectEvent: (event: EventMarker) => void;
 }
 
+const REGIONS: RegionCategory[] = [
+  "Americas",
+  "Europe",
+  "Middle East",
+  "Africa",
+  "Asia",
+  "Oceania",
+];
+
 export function ExploreView({
   events,
+  allEvents,
+  activeTopic,
+  activeRegion,
+  onTopicChange,
+  onRegionChange,
   isLoading,
   error,
   onSelectEvent,
@@ -20,6 +47,24 @@ export function ExploreView({
   const scrollRef = useRef<HTMLDivElement>(null);
   const [canScrollLeft, setCanScrollLeft] = useState(false);
   const [canScrollRight, setCanScrollRight] = useState(false);
+
+  const topicCounts = useMemo(() => {
+    const counts: Record<string, number> = {};
+    allEvents.forEach(ev => {
+      const t = getEventTopic(ev.title);
+      counts[t] = (counts[t] || 0) + 1;
+    });
+    return counts;
+  }, [allEvents]);
+
+  const regionCounts = useMemo(() => {
+    const counts: Record<string, number> = {};
+    allEvents.forEach(ev => {
+      const r = getEventRegion(ev.lat, ev.lng);
+      if (r) counts[r] = (counts[r] || 0) + 1;
+    });
+    return counts;
+  }, [allEvents]);
 
   const checkScroll = useCallback(() => {
     const el = scrollRef.current;
@@ -96,36 +141,94 @@ export function ExploreView({
         )}
       </header>
 
-      {/* Floating HUD Legend */}
-      {!isLoading && events.length > 0 && (
-        <div className="absolute right-5 top-20 pointer-events-auto hidden sm:flex flex-col gap-2 rounded-xl border border-white/[0.06] bg-black/60 p-3.5 backdrop-blur-lg z-20">
-          <p className="text-[8px] font-bold tracking-[0.2em] text-slate-500 uppercase">Geographic Key</p>
-          <div className="grid grid-cols-2 gap-x-4 gap-y-2 mt-1">
-            <div className="flex items-center gap-2">
-              <span className="h-1.5 w-1.5 rounded-full bg-[#38bdf8]" />
-              <span className="text-[9px] text-slate-400 font-medium uppercase tracking-wider">Americas</span>
+      {/* Thematic HUD Controller */}
+      {!isLoading && allEvents.length > 0 && (
+        <div className="absolute left-5 top-24 pointer-events-auto flex flex-col gap-5 z-20">
+          <motion.div 
+            initial={{ x: -20, opacity: 0 }}
+            animate={{ x: 0, opacity: 1 }}
+            className="backdrop-blur-xl bg-black/45 border border-white/[0.08] shadow-[0_24px_48px_-12px_rgba(0,0,0,0.8)] rounded-2xl p-4 w-[240px]"
+          >
+            <div className="space-y-6">
+              {/* Topics */}
+              <div>
+                <p className="text-[8px] font-bold tracking-[0.2em] text-slate-500 uppercase mb-3">Filter Topics</p>
+                <div className="flex flex-wrap gap-2">
+                  {(Object.keys(TOPIC_CONFIG) as TopicCategory[]).map((topic) => {
+                    const count = topicCounts[topic] || 0;
+                    if (count === 0) return null;
+                    const isActive = activeTopic === topic;
+                    const config = TOPIC_CONFIG[topic];
+                    
+                    return (
+                      <motion.button
+                        key={topic}
+                        whileHover={{ scale: 1.05, y: -1 }}
+                        whileTap={{ scale: 0.95 }}
+                        onClick={() => onTopicChange(isActive ? null : topic)}
+                        className={`px-2.5 py-1.5 rounded-lg border text-[10px] font-bold transition-all duration-300 flex items-center gap-1.5 ${
+                          isActive 
+                            ? "bg-white/[0.08] border-white/20 text-white" 
+                            : "bg-white/[0.02] border-white/[0.04] text-slate-500 hover:border-white/10 hover:text-slate-300"
+                        }`}
+                        style={{ 
+                          boxShadow: isActive ? `0 0 12px ${config.color}33` : 'none',
+                          borderColor: isActive ? config.color : undefined
+                        }}
+                      >
+                        <span className="w-1.5 h-1.5 rounded-full" style={{ background: config.color }} />
+                        {topic}
+                        <span className="opacity-40 font-mono text-[9px]">{count}</span>
+                      </motion.button>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {/* Regions */}
+              <div>
+                <p className="text-[8px] font-bold tracking-[0.2em] text-slate-500 uppercase mb-3">Geographic Filter</p>
+                <div className="flex flex-wrap gap-1.5">
+                  {REGIONS.map((region) => {
+                    const count = regionCounts[region] || 0;
+                    if (count === 0) return null;
+                    const isActive = activeRegion === region;
+                    
+                    return (
+                      <motion.button
+                        key={region}
+                        whileHover={{ scale: 1.02 }}
+                        whileTap={{ scale: 0.98 }}
+                        onClick={() => onRegionChange(isActive ? null : region)}
+                        className={`px-2 py-1 rounded-md border text-[9px] font-semibold tracking-wide transition-all ${
+                          isActive 
+                            ? "bg-cyan-500/10 border-cyan-500/40 text-cyan-400" 
+                            : "bg-white/[0.01] border-white/[0.04] text-slate-600 hover:text-slate-400"
+                        }`}
+                      >
+                        {region} <span className="ml-1 opacity-40">{count}</span>
+                      </motion.button>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {/* Reset */}
+              {(activeTopic || activeRegion) && (
+                <motion.button
+                  initial={{ opacity: 0, scale: 0.9 }}
+                  animate={{ opacity: 1, scale: 1 }}
+                  onClick={() => {
+                    onTopicChange(null);
+                    onRegionChange(null);
+                  }}
+                  className="w-full py-2 rounded-lg bg-white/5 border border-white/10 text-[9px] font-bold uppercase tracking-widest text-slate-400 hover:bg-white/10 hover:text-white transition-all"
+                >
+                  Reset Filters
+                </motion.button>
+              )}
             </div>
-            <div className="flex items-center gap-2">
-              <span className="h-1.5 w-1.5 rounded-full bg-[#a78bfa]" />
-              <span className="text-[9px] text-slate-400 font-medium uppercase tracking-wider">Europe</span>
-            </div>
-            <div className="flex items-center gap-2">
-              <span className="h-1.5 w-1.5 rounded-full bg-[#f472b6]" />
-              <span className="text-[9px] text-slate-400 font-medium uppercase tracking-wider">Mid East</span>
-            </div>
-            <div className="flex items-center gap-2">
-              <span className="h-1.5 w-1.5 rounded-full bg-[#f59e0b]" />
-              <span className="text-[9px] text-slate-400 font-medium uppercase tracking-wider">Africa</span>
-            </div>
-            <div className="flex items-center gap-2">
-              <span className="h-1.5 w-1.5 rounded-full bg-[#22d3ee]" />
-              <span className="text-[9px] text-slate-400 font-medium uppercase tracking-wider">Asia</span>
-            </div>
-            <div className="flex items-center gap-2">
-              <span className="h-1.5 w-1.5 rounded-full bg-[#34d399]" />
-              <span className="text-[9px] text-slate-400 font-medium uppercase tracking-wider">Oceania</span>
-            </div>
-          </div>
+          </motion.div>
         </div>
       )}
 
@@ -226,45 +329,55 @@ export function ExploreView({
                 )}
 
                 <div ref={scrollRef} className="flex gap-3 overflow-x-auto pb-2 -mx-1 px-1 snap-x snap-mandatory" style={{ scrollbarWidth: 'none', msOverflowStyle: 'none', WebkitOverflowScrolling: 'touch' }}>
-                  {events.map((event, index) => (
-                    <button
-                      key={event.id}
-                      type="button"
-                      onClick={() => onSelectEvent(event)}
-                      style={{ animationDelay: `${index * 60}ms` }}
-                      className="group relative flex-shrink-0 w-[280px] md:w-[320px] snap-start rounded-xl border border-white/[0.06] bg-white/[0.03] p-4 text-left backdrop-blur-lg glow-card-hover animate-pill-in opacity-0 active:scale-[0.98]"
-                    >
-                      {/* Glow accent */}
-                      <div className="absolute inset-0 rounded-xl bg-gradient-to-br from-cyan-500/[0.04] to-purple-500/[0.04] opacity-0 group-hover:opacity-100 transition-opacity" />
-                      
-                      <div className="relative flex items-start justify-between gap-3">
-                        <div className="min-w-0 flex-1">
-                          <p className="text-[13px] font-medium text-white leading-snug line-clamp-2 group-hover:text-cyan-50 transition-colors">
-                            {event.title}
-                          </p>
-                          <div className="mt-2 flex items-center gap-3">
-                            <span className="text-[10px] text-slate-500">
-                              {new Date(event.created_at).toLocaleDateString(undefined, {
-                                month: "short",
-                                day: "numeric",
-                              })}
-                            </span>
-                            <span className="h-0.5 w-0.5 rounded-full bg-slate-600" />
-                            <span className="text-[10px] font-medium text-slate-400">
-                              {event.story_count} sources
-                            </span>
+                  <AnimatePresence mode="popLayout">
+                    {events.map((event, index) => (
+                      <motion.button
+                        layout
+                        initial={{ opacity: 0, scale: 0.9, y: 20 }}
+                        animate={{ opacity: 1, scale: 1, y: 0 }}
+                        exit={{ opacity: 0, scale: 0.8, y: 10 }}
+                        transition={{ 
+                          duration: 0.4, 
+                          delay: index * 0.03,
+                          layout: { duration: 0.4, ease: "easeInOut" }
+                        }}
+                        key={event.id}
+                        type="button"
+                        onClick={() => onSelectEvent(event)}
+                        className="group relative flex-shrink-0 w-[280px] md:w-[320px] snap-start rounded-xl border border-white/[0.06] bg-white/[0.03] p-4 text-left backdrop-blur-lg glow-card-hover active:scale-[0.98]"
+                      >
+                        {/* Glow accent */}
+                        <div className="absolute inset-0 rounded-xl bg-gradient-to-br from-cyan-500/[0.04] to-purple-500/[0.04] opacity-0 group-hover:opacity-100 transition-opacity" />
+                        
+                        <div className="relative flex items-start justify-between gap-3">
+                          <div className="min-w-0 flex-1">
+                            <p className="text-[13px] font-medium text-white leading-snug line-clamp-2 group-hover:text-cyan-50 transition-colors">
+                              {event.title}
+                            </p>
+                            <div className="mt-2 flex items-center gap-3">
+                              <span className="text-[10px] text-slate-500">
+                                {new Date(event.created_at).toLocaleDateString(undefined, {
+                                  month: "short",
+                                  day: "numeric",
+                                })}
+                              </span>
+                              <span className="h-0.5 w-0.5 rounded-full bg-slate-600" />
+                              <span className="text-[10px] font-medium text-slate-400">
+                                {event.story_count} sources
+                              </span>
+                            </div>
+                          </div>
+                          
+                          <div className="flex flex-col items-center gap-2 shrink-0">
+                            <SourceDiversityRing slices={event.source_diversity ?? []} />
+                            <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" className="text-slate-600 group-hover:text-cyan-400 transition-colors group-hover:translate-x-0.5 transition-transform">
+                              <polyline points="9 18 15 12 9 6"/>
+                            </svg>
                           </div>
                         </div>
-                        
-                        <div className="flex flex-col items-center gap-2 shrink-0">
-                          <SourceDiversityRing slices={event.source_diversity ?? []} />
-                          <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" className="text-slate-600 group-hover:text-cyan-400 transition-colors group-hover:translate-x-0.5 transition-transform">
-                            <polyline points="9 18 15 12 9 6"/>
-                          </svg>
-                        </div>
-                      </div>
-                    </button>
-                  ))}
+                      </motion.button>
+                    ))}
+                  </AnimatePresence>
                 </div>
               </div>
             </>

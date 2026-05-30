@@ -16,9 +16,39 @@ const API_BASE_URL =
   process.env.NEXT_PUBLIC_API_BASE_URL ?? (process.env.NODE_ENV === "development" ? "http://localhost:8000" : "");
 
 export type ViewState = "explore" | "hero" | "analysis" | "comparison" | "sentiment";
+export type TopicCategory = "Conflict" | "Tech" | "Climate" | "Social" | "General";
+export type RegionCategory = "Americas" | "Europe" | "Middle East" | "Africa" | "Asia" | "Oceania";
+
+export const TOPIC_CONFIG: Record<TopicCategory, { regex: RegExp; color: string }> = {
+  Conflict: { regex: /war|conflict|attack|strike|military|protest|riot|kill|death/i, color: "#ef4444" },
+  Tech: { regex: /tech|ai|semiconductor|crypto|launch|startup|space|digital/i, color: "#8b5cf6" },
+  Climate: { regex: /climate|earthquake|storm|flood|carbon|emission|nature|ocean/i, color: "#10b981" },
+  Social: { regex: /social|rights|law|bill|policy|election|vote|human/i, color: "#22d3ee" },
+  General: { regex: /./, color: "#64748b" },
+};
+
+export function getEventTopic(title: string): TopicCategory {
+  if (TOPIC_CONFIG.Conflict.regex.test(title)) return "Conflict";
+  if (TOPIC_CONFIG.Tech.regex.test(title)) return "Tech";
+  if (TOPIC_CONFIG.Climate.regex.test(title)) return "Climate";
+  if (TOPIC_CONFIG.Social.regex.test(title)) return "Social";
+  return "General";
+}
+
+export function getEventRegion(lat: number, lng: number): RegionCategory | null {
+  if (lng <= -30) return "Americas";
+  if (lng >= 30 && lng <= 60 && lat >= 12 && lat <= 42) return "Middle East";
+  if (lng >= -25 && lng <= 45 && lat >= 36) return "Europe";
+  if (lng >= -20 && lng <= 50 && lat >= -35 && lat <= 35) return "Africa";
+  if (lng >= 60 && lng <= 150 && lat >= 5) return "Asia";
+  if (lng >= 110 && lng <= 180 && lat < 5) return "Oceania";
+  return null;
+}
 
 export default function HomePage() {
   const [view, setView] = useState<ViewState>("explore");
+  const [activeTopic, setActiveTopic] = useState<TopicCategory | null>(null);
+  const [activeRegion, setActiveRegion] = useState<RegionCategory | null>(null);
   const [events, setEvents] = useState<EventMarker[]>([]);
   const [selectedEvent, setSelectedEvent] = useState<EventMarker | null>(null);
   const [eventDetails, setEventDetails] =
@@ -169,6 +199,16 @@ export default function HomePage() {
     setComparisonPair(null);
   };
 
+  const filteredEvents = useMemo(() => {
+    return events.filter((ev) => {
+      const topic = getEventTopic(ev.title);
+      const region = getEventRegion(ev.lat, ev.lng);
+      const topicMatch = !activeTopic || topic === activeTopic;
+      const regionMatch = !activeRegion || region === activeRegion;
+      return topicMatch && regionMatch;
+    });
+  }, [events, activeTopic, activeRegion]);
+
   return (
     <main className="relative min-h-screen w-full overflow-hidden bg-[#000000] text-slate-100">
       
@@ -190,7 +230,7 @@ export default function HomePage() {
         }}
       >
         <GlobeView
-          events={events}
+          events={filteredEvents}
           selectedEventId={selectedEvent?.id ?? null}
           onSelectEvent={handleSelectEvent}
           perspectives={eventDetails?.perspectives ?? []}
@@ -225,7 +265,12 @@ export default function HomePage() {
             transition={{ duration: 0.6, ease: "circOut" }}
           >
             <ExploreView
-              events={events}
+              events={filteredEvents}
+              allEvents={events}
+              activeTopic={activeTopic}
+              activeRegion={activeRegion}
+              onTopicChange={setActiveTopic}
+              onRegionChange={setActiveRegion}
               isLoading={isLoadingEvents}
               error={error}
               onSelectEvent={handleSelectEvent}
