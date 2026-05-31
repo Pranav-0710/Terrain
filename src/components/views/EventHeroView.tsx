@@ -9,7 +9,7 @@ interface EventHeroViewProps {
   eventDetails: EventPerspectiveResponse | null;
   isLoading: boolean;
   onBack: () => void;
-  onNavigate: (view: "analysis" | "sentiment") => void;
+  onNavigate: (view: "analysis" | "sentiment" | "simulation") => void;
 }
 
 const containerVariants: Variants = {
@@ -51,6 +51,17 @@ const features = [
     borderColor: "border-purple-500/20",
     iconColor: "text-purple-400",
     hint: "Tone distribution, bias vectors, and per-source sentiment breakdown",
+  },
+  {
+    id: "simulation" as const,
+    title: "Red Team Simulator",
+    description: "Assume the role of a policymaker. Choose a response and simulate the 30-day geopolitical fallout on the global stage.",
+    icon: GitMerge,
+    gradient: "from-magenta-500 to-rose-600",
+    glowColor: "rgba(217, 70, 239, 0.15)",
+    borderColor: "border-magenta-500/20",
+    iconColor: "text-magenta-400",
+    hint: "Scenario modeling, predictive ripples, and outcome visualization",
   },
 ];
 
@@ -138,7 +149,7 @@ export function EventHeroView({
             </p>
           </motion.div>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
             {features.map((feature) => {
               const Icon = feature.icon;
               const isDisabled = !hasData;

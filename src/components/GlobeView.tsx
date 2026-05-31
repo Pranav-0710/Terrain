@@ -21,6 +21,7 @@ interface GlobeViewProps {
   selectedEventId: string | null;
   onSelectEvent: (event: EventMarker) => void;
   perspectives?: any[]; // Perspectives for the selected event
+  isSimulated?: boolean;
 }
 
 export function GlobeView({
@@ -28,6 +29,7 @@ export function GlobeView({
   selectedEventId,
   onSelectEvent,
   perspectives = [],
+  isSimulated = false,
 }: GlobeViewProps) {
   const globeRef = useRef<any>(null);
 
@@ -37,15 +39,21 @@ export function GlobeView({
         const topic = getEventTopic(event.title);
         const config = TOPIC_CONFIG[topic];
         
+        let color = event.id === selectedEventId ? '#ffffff' : config.color;
+        
+        if (isSimulated) {
+          color = event.id === selectedEventId ? '#ffffff' : '#d946ef'; // Magenta for simulation
+        }
+
         return {
           ...event,
           maxRadius: (event as any).story_count ? Math.min(Math.max((event as any).story_count * 0.8, 1.5), 8) : 2,
-          propagationSpeed: 1.5,
-          repeatPeriod: 2000,
-          color: event.id === selectedEventId ? '#ffffff' : config.color,
+          propagationSpeed: isSimulated ? 2.5 : 1.5,
+          repeatPeriod: isSimulated ? 1000 : 2000,
+          color,
         };
       }),
-    [events, selectedEventId],
+    [events, selectedEventId, isSimulated],
   );
 
   const arcsData = useMemo(() => {
@@ -134,26 +142,31 @@ export function GlobeView({
 
         pointLabel={(point) => {
           const event = point as EventMarker & { story_count: number };
+          const label = isSimulated ? "TIMELINE PROJECTED" : "RECON REPORT";
+          const accentColor = isSimulated ? "#d946ef" : "#22d3ee";
+          const borderColor = isSimulated ? "rgba(217, 70, 239, 0.35)" : "rgba(34, 211, 238, 0.35)";
+          const glowColor = isSimulated ? "rgba(217, 70, 239, 0.15)" : "rgba(34, 211, 238, 0.15)";
+
           return `
             <div style="
               padding: 12px 16px;
               border-radius: 12px;
               background: rgba(10, 10, 10, 0.95);
-              border: 1px solid rgba(34, 211, 238, 0.35);
-              box-shadow: 0 10px 30px -10px rgba(0, 0, 0, 0.7), 0 0 15px rgba(34, 211, 238, 0.15);
+              border: 1px solid ${borderColor};
+              box-shadow: 0 10px 30px -10px rgba(0, 0, 0, 0.7), 0 0 15px ${glowColor};
               color: white;
               min-width: 220px;
               max-width: 300px;
               font-family: 'Inter', system-ui, sans-serif;
             ">
               <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid rgba(255,255,255,0.08); padding-bottom: 6px; margin-bottom: 8px;">
-                <span style="font-size: 9px; font-weight: 700; letter-spacing: 0.15em; text-transform: uppercase; color: #22d3ee;">RECON REPORT</span>
+                <span style="font-size: 9px; font-weight: 700; letter-spacing: 0.15em; text-transform: uppercase; color: ${accentColor};">${label}</span>
                 <span style="font-size: 8px; font-family: monospace; color: rgba(255,255,255,0.4);">${event.lat.toFixed(2)}°N, ${event.lng.toFixed(2)}°E</span>
               </div>
               <div style="font-size: 13px; font-weight: 600; line-height: 1.4; color: #ffffff; margin-bottom: 8px;">${event.title}</div>
               <div style="display: flex; align-items: center; gap: 6px; font-size: 10px; color: #cbd5e1;">
-                <span style="display: inline-block; width: 6px; height: 6px; border-radius: 50%; background: #22d3ee;"></span>
-                <span>${event.story_count} perspectives tracked</span>
+                <span style="display: inline-block; width: 6px; height: 6px; border-radius: 50%; background: ${accentColor};"></span>
+                <span>${event.story_count} perspectives ${isSimulated ? 'projected' : 'tracked'}</span>
               </div>
             </div>
           `;

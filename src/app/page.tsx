@@ -8,14 +8,16 @@ import { ExploreView } from "../components/views/ExploreView";
 import { AnalysisView } from "../components/views/AnalysisView";
 import { ComparisonView } from "../components/views/ComparisonView";
 import { SentimentView } from "../components/views/SentimentView";
+import { SimulationView } from "../components/views/SimulationView";
 import { EventHeroView } from "../components/views/EventHeroView";
 import { AuroraBackground, type AuroraTheme } from "../components/AuroraBackground";
+import { XCircle } from "lucide-react";
 import type { EventMarker, EventPerspectiveResponse, Perspective } from "./types";
 
 const API_BASE_URL =
   process.env.NEXT_PUBLIC_API_BASE_URL ?? (process.env.NODE_ENV === "development" ? "http://localhost:8000" : "");
 
-export type ViewState = "explore" | "hero" | "analysis" | "comparison" | "sentiment";
+export type ViewState = "explore" | "hero" | "analysis" | "comparison" | "sentiment" | "simulation";
 export type TopicCategory = "Conflict" | "Tech" | "Climate" | "Social" | "General";
 export type RegionCategory = "Americas" | "Europe" | "Middle East" | "Africa" | "Asia" | "Oceania";
 
@@ -50,6 +52,9 @@ export default function HomePage() {
   const [activeTopic, setActiveTopic] = useState<TopicCategory | null>(null);
   const [activeRegion, setActiveRegion] = useState<RegionCategory | null>(null);
   const [events, setEvents] = useState<EventMarker[]>([]);
+  const [simulatedEvents, setSimulatedEvents] = useState<EventMarker[]>([]);
+  const [isSimulationActive, setIsSimulationActive] = useState(false);
+  
   const [selectedEvent, setSelectedEvent] = useState<EventMarker | null>(null);
   const [eventDetails, setEventDetails] =
     useState<EventPerspectiveResponse | null>(null);
@@ -63,6 +68,7 @@ export default function HomePage() {
 
   // ── Theme Detection ──
   const auroraTheme = useMemo<AuroraTheme>(() => {
+    if (isSimulationActive) return "tech";
     if (!selectedEvent) return "neutral";
     const title = (eventDetails?.event_title ?? selectedEvent.title).toLowerCase();
     
@@ -72,7 +78,7 @@ export default function HomePage() {
     if (title.match(/social|rights|law|bill|policy|election|vote|human/)) return "social";
     
     return "neutral";
-  }, [selectedEvent, eventDetails]);
+  }, [selectedEvent, eventDetails, isSimulationActive]);
 
   // ── Load events on mount ──
   useEffect(() => {
@@ -187,10 +193,12 @@ export default function HomePage() {
       setView("comparison");
     } else if (newView === "sentiment" && selectedEvent) {
       setView("sentiment");
+    } else if (newView === "simulation" && selectedEvent) {
+      setView("simulation");
     }
   };
 
-  const handleHeroNavigate = (target: "analysis" | "sentiment") => {
+  const handleHeroNavigate = (target: "analysis" | "sentiment" | "simulation") => {
     setView(target);
   };
 
@@ -199,21 +207,66 @@ export default function HomePage() {
     setComparisonPair(null);
   };
 
+  const handleStartSimulation = (simulated: EventMarker[]) => {
+    setSimulatedEvents(simulated);
+    setIsSimulationActive(true);
+    setView("explore");
+    setSelectedEvent(null);
+  };
+
+  const handleExitSimulation = () => {
+    setIsSimulationActive(false);
+    setSimulatedEvents([]);
+    setSelectedEvent(null);
+    setView("explore");
+  };
+
   const filteredEvents = useMemo(() => {
-    return events.filter((ev) => {
+    const baseEvents = isSimulationActive ? simulatedEvents : events;
+    return baseEvents.filter((ev) => {
       const topic = getEventTopic(ev.title);
       const region = getEventRegion(ev.lat, ev.lng);
       const topicMatch = !activeTopic || topic === activeTopic;
       const regionMatch = !activeRegion || region === activeRegion;
       return topicMatch && regionMatch;
     });
-  }, [events, activeTopic, activeRegion]);
+  }, [events, simulatedEvents, isSimulationActive, activeTopic, activeRegion]);
 
   return (
     <main className="relative min-h-screen w-full overflow-hidden bg-[#000000] text-slate-100">
       
       {/* Living Ambient Atmosphere */}
       <AuroraBackground theme={auroraTheme} />
+
+      {/* Simulation HUD Overlay */}
+      <AnimatePresence>
+        {isSimulationActive && (
+          <motion.div
+            initial={{ opacity: 0, y: -20 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -20 }}
+            className="fixed top-8 left-1/2 -translate-x-1/2 z-[100] flex items-center gap-4 px-6 py-3 rounded-2xl border border-fuchsia-500/30 bg-black/60 backdrop-blur-xl shadow-[0_0_30px_rgba(217,70,239,0.15)]"
+          >
+            <div className="flex items-center gap-3">
+              <div className="relative flex h-2 w-2">
+                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-fuchsia-500 opacity-75" />
+                <span className="relative inline-flex rounded-full h-2 w-2 bg-fuchsia-400" />
+              </div>
+              <span className="text-[10px] font-bold uppercase tracking-[0.2em] text-fuchsia-400">
+                Simulation Active: +30 Days
+              </span>
+            </div>
+            <div className="h-4 w-px bg-white/10" />
+            <button
+              onClick={handleExitSimulation}
+              className="group flex items-center gap-2 text-[10px] font-bold uppercase tracking-widest text-slate-400 hover:text-white transition-colors"
+            >
+              <span>Exit Reality Warp</span>
+              <XCircle className="w-3.5 h-3.5 group-hover:rotate-90 transition-transform" />
+            </button>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       {/* 3D Globe — Spatial cinematic background */}
       <motion.div
@@ -234,6 +287,7 @@ export default function HomePage() {
           selectedEventId={selectedEvent?.id ?? null}
           onSelectEvent={handleSelectEvent}
           perspectives={eventDetails?.perspectives ?? []}
+          isSimulated={isSimulationActive}
         />
       </motion.div>
 
@@ -294,6 +348,23 @@ export default function HomePage() {
               isLoading={isLoadingDetails}
               onBack={handleBackToExplore}
               onNavigate={handleHeroNavigate}
+            />
+          </motion.div>
+        )}
+
+        {/* Simulation View */}
+        {view === "simulation" && selectedEvent && (
+          <motion.div
+            key="simulation"
+            className="absolute inset-0 z-50"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+          >
+            <SimulationView
+              event={selectedEvent}
+              onBack={handleBackToHero}
+              onComplete={handleStartSimulation}
             />
           </motion.div>
         )}
