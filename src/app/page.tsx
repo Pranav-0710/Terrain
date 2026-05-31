@@ -117,7 +117,7 @@ export default function HomePage() {
 
   // ── Load event details when an event is selected ──
   useEffect(() => {
-    if (!selectedEvent) {
+    if (!selectedEvent || isSimulationActive) {
       setEventDetails(null);
       return;
     }
@@ -170,6 +170,7 @@ export default function HomePage() {
     setSelectedEvent(null);
     setEventDetails(null);
     setComparisonPair(null);
+    setError(null);
   };
 
   const handleCompare = (a: Perspective, b: Perspective) => {
@@ -218,6 +219,7 @@ export default function HomePage() {
     setIsSimulationActive(false);
     setSimulatedEvents([]);
     setSelectedEvent(null);
+    setError(null);
     setView("explore");
   };
 
